@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Financeiro - Lalabank</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 0; background-color: #f8f9fa; color: #212529; }
+        .container { max-width: 1400px; margin: auto; padding: 2em; }
+        h1, h2 { color: #343a40; }
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1em; margin-bottom: 2em; }
+        .card { background-color: white; padding: 1.5em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center; }
+        .card h3 { margin-top: 0; font-size: 1em; color: #6c757d; }
+        .card p { font-size: 1.5em; font-weight: bold; margin-bottom: 0; }
+        .receita { color: #198754; }
+        .despesa { color: #dc3545; }
+        .balanco { color: #0d6efd; }
+        table { width: 100%; border-collapse: collapse; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-top: 2em; }
+        th, td { padding: 12px; border-bottom: 1px solid #dee2e6; text-align: left; }
+        th { background-color: #f8f9fa; font-weight: bold; }
+        .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2em; }
+        .chart-container { background-color: white; padding: 2em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .chart-container h3 { text-align: center; margin-top: 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Dashboard Financeiro</h1>
+        <h2>Usuário: {{ user_id }}</h2>
+
+        <div class="summary">
+            <div class="card"><h3 class="receita">Total de Receitas</h3><p class="receita">R$ {{ "%.2f"|format(total_receitas) }}</p></div>
+            <div class="card"><h3 class="despesa">Total de Despesas</h3><p class="despesa">R$ {{ "%.2f"|format(total_despesas) }}</p></div>
+            <div class="card"><h3 class="balanco">Balanço Final</h3><p class="balanco">R$ {{ "%.2f"|format(balanco) }}</p></div>
+        </div>
+
+        {% if faturas %}
+        <h2>Faturas de Cartão de Crédito</h2>
+        <div class="summary">
+            {% for cartao, total in faturas.items() %}
+            <div class="card">
+                <h3>Fatura {{ cartao }}</h3>
+                <p class="despesa">R$ {{ "%.2f"|format(total) }}</p>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="charts-grid">
+            <div class="chart-container"><h3>Gastos no Débito: R$ {{ "%.2f"|format(total_gastos_debito) }}</h3><canvas id="debitChart"></canvas></div>
+            <div class="chart-container"><h3>Gastos no Crédito: R$ {{ "%.2f"|format(total_gastos_credito) }}</h3><canvas id="creditChart"></canvas></div>
+            <div class="chart-container"><h3>Total de Gastos: R$ {{ "%.2f"|format(total_despesas) }}</h3><canvas id="totalChart"></canvas></div>
+        </div>
+
+        <h2>Extrato de Transações</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th>Categoria</th>
+                    <th>Método</th>
+                    <th>Cartão</th>
+                    <th>Tipo</th>
+                    <th>Valor (R$)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for transacao in transacoes|reverse %}
+                <tr>
+                    <td>{{ transacao.timestamp.split('T')[0] }}</td>
+                    <td>{{ transacao.descricao }}</td>
+                    <td>{{ transacao.get('categoria', 'N/A') }}</td>
+                    <td>{{ transacao.get('metodo', 'N/A') }}</td>
+                    <td>{{ transacao.get('cartao', 'N/A') }}</td>
+                    <td class="{{ transacao.tipo }}">{{ transacao.tipo.capitalize() }}</td>
+                    <td class="{{ transacao.tipo }}">{{ "- " if transacao.tipo == 'despesa' else "+ " }}{{ "%.2f"|format(transacao.valor) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        Chart.register(ChartDataLabels);
+
+        function prepareChartData(transactions) {
+            const dataByCategory = {};
+            transactions.forEach(d => {
+                const category = d.categoria || 'Outros';
+                if (dataByCategory[category]) {
+                    dataByCategory[category] += d.valor;
+                } else {
+                    dataByCategory[category] = d.valor;
+                }
+            });
+            return {
+                labels: Object.keys(dataByCategory),
+                data: Object.values(dataByCategory)
+            };
+        }
+
+        function createPieChart(canvasId, labels, data) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            if (data.length === 0) {
+                ctx.font = "16px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText("Sem dados para exibir", ctx.canvas.width / 2, ctx.canvas.height / 2);
+                return;
+            }
+            const total = data.reduce((acc, value) => acc + value, 0);
+
+            new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED', '#7D4F50'],
+                        borderColor: '#fff',
+                        borderWidth: 2
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    plugins: { 
+                        datalabels: {
+                            formatter: (value, context) => {
+                                const label = context.chart.data.labels[context.dataIndex];
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return `${label}\n R$ ${value.toFixed(2)} (${percentage}%)`;
+                            },
+                            color: '#fff',
+                            font: { weight: 'bold', size: 12 },
+                            textStrokeColor: 'black',
+                            textStrokeWidth: 1
+                        },
+                        legend: { display: false }
+                    } 
+                }
+            });
+        }
+
+        const despesasDebito = {{ despesas_debito|tojson }};
+        const despesasCredito = {{ despesas_credito|tojson }};
+        const totalDespesas = despesasDebito.concat(despesasCredito);
+
+        const debitData = prepareChartData(despesasDebito);
+        createPieChart('debitChart', debitData.labels, debitData.data);
+
+        const creditData = prepareChartData(despesasCredito);
+        createPieChart('creditChart', creditData.labels, creditData.data);
+
+        const totalData = prepareChartData(totalDespesas);
+        createPieChart('totalChart', totalData.labels, totalData.data);
+    </script>
+</body>
+</html>
