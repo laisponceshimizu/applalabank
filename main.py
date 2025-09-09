@@ -14,6 +14,11 @@ PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
 
 app = Flask(__name__)
 
+@app.route('/')
+def index():
+    """Homepage redirect to dashboard"""
+    return render_template('index.html')
+
 # --- (Funções de categorização e processamento de mensagem normal) ---
 def categorizar_despesa(descricao):
     # ... (código igual ao anterior)
