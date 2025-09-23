@@ -9,6 +9,8 @@ def get_user_data(user_id, key, default_value):
     config = ConfiguracaoUsuario.query.filter_by(user_id=user_id, chave=key).first()
     if config:
         return config.get_valor()
+    # Se não encontrar, cria um registro com o valor padrão
+    set_user_data(user_id, key, default_value)
     return default_value
 
 def set_user_data(user_id, key, value):
@@ -166,6 +168,6 @@ def verificar_senha_db(user_id, senha):
 
 def get_all_user_ids():
     # Consulta o banco de dados para encontrar todos os user_ids únicos
-    user_ids = db.session.query(ConfiguracaoUsuario.user_id).distinct().all()
+    user_ids_tuplas = db.session.query(ConfiguracaoUsuario.user_id).distinct().all()
     # A consulta retorna uma lista de tuplas, então extraímos o primeiro elemento de cada
-    return sorted([uid[0] for uid in user_ids])
+    return sorted([uid[0] for uid in user_ids_tuplas])
