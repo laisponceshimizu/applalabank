@@ -1,9 +1,28 @@
 from flask import Flask, request, make_response, render_template, session, redirect, url_for, flash
+from flask_sqlalchemy import SQLAlchemy
+import os
 
-# Importa as funções dos nossos novos arquivos
+# --- INÍCIO DAS MODIFICAÇÕES PARA O RENDER ---
+
+# 1. Inicializa o app Flask
+app = Flask(__name__)
+
+# 2. Configura a chave secreta e a URL do banco de dados a partir das variáveis de ambiente
+#    Você vai configurar estas variáveis no painel do Render.
+app.secret_key = os.environ.get('SECRET_KEY', 'uma-chave-padrao-para-desenvolvimento')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# 3. Inicializa o SQLAlchemy para conectar o app ao banco de dados
+db = SQLAlchemy(app)
+
+# --- FIM DAS MODIFICAÇÕES PARA O RENDER ---
+
+
+# Importa as funções dos outros arquivos
 from utils import processar_mensagem, send_whatsapp_message, verificar_e_enviar_lembretes
 from database import (
-    salvar_meta_db, apagar_categoria_db, apagar_conta_db, 
+    salvar_meta_db, apagar_categoria_db, apagar_conta_db,
     adicionar_conta_db, adicionar_categoria_db, apagar_meta_db,
     salvar_regras_cartao_db, apagar_lembrete_db, apagar_transacao_db,
     get_all_user_ids,
@@ -11,20 +30,11 @@ from database import (
 )
 from dashboard_calculations import calcular_dados_dashboard
 
-app = Flask(__name__)
-# ADICIONE UMA CHAVE SECRETA PARA GERENCIAR SESSÕES
-# Troque por uma string aleatória e segura em um ambiente real
-app.secret_key = 'sua-chave-secreta-muito-segura'
+# Importa os modelos do banco de dados (que criaremos a seguir)
+from models import *
 
 @app.route("/webhook", methods=['GET', 'POST'])
 def webhook():
-    # --- NOVO LOG PARA DEPURAR ---
-    print(f"\n--- Webhook Recebido ---")
-    print(f"Método: {request.method}")
-    print(f"Headers: {request.headers}")
-    print(f"Dados brutos: {request.data}")
-    # --- FIM DO NOVO LOG ---
-
     if request.method == 'POST':
         data = request.get_json()
         if data is None:
@@ -47,8 +57,9 @@ def webhook():
                         send_whatsapp_message(phone_number, resposta_bot)
 
         except (KeyError, IndexError):
-            # Ignora eventos que não são mensagens de texto (ex: status de entrega)
-            pass 
+            print(f"✅ Notificação recebida, mas não é uma mensagem de texto. Ignorando.")
+            print(f"Dados completos recebidos: {data}")
+
 
         return make_response("EVENT_RECEIVED", 200)
 
@@ -154,5 +165,5 @@ def delete_transaction():
     return make_response("Transação apagada", 200)
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=8080)
-
+    # Esta parte é para rodar localmente, o Render usará o gunicorn
+    app.run(host='0.0.0.0', port=5000)
