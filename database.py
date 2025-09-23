@@ -1,36 +1,76 @@
-from replit import db
+# database.py (Versão para Render/SQLAlchemy)
+
+from main import db
+from models import Transacao, CompraParcelada, ConfiguracaoUsuario
 from datetime import datetime
 
 # --- Funções Genéricas ---
 def get_user_data(user_id, key, default_value):
-    return db.get(f"{key}_{user_id}", default_value)
+    config = ConfiguracaoUsuario.query.filter_by(user_id=user_id, chave=key).first()
+    if config:
+        return config.get_valor()
+    return default_value
 
 def set_user_data(user_id, key, value):
-    db[f"{key}_{user_id}"] = value
+    config = ConfiguracaoUsuario.query.filter_by(user_id=user_id, chave=key).first()
+    if not config:
+        config = ConfiguracaoUsuario(user_id=user_id, chave=key)
+        db.session.add(config)
+    config.set_valor(value)
+    db.session.commit()
 
 # --- Transações ---
 def get_transacoes_db(user_id):
-    return get_user_data(user_id, "transacoes", [])
+    transacoes_obj = Transacao.query.filter_by(user_id=user_id).all()
+    # Converte os objetos para dicionários para manter compatibilidade
+    return [
+        {c.name: getattr(t, c.name) for c in t.__table__.columns}
+        for t in transacoes_obj
+    ]
 
 def salvar_transacao_db(user_id, data):
-    transacoes = get_transacoes_db(user_id)
-    transacoes.append(data)
-    set_user_data(user_id, "transacoes", transacoes)
+    nova_transacao = Transacao(
+        user_id=user_id,
+        tipo=data.get('tipo'),
+        descricao=data.get('descricao'),
+        valor=data.get('valor'),
+        categoria=data.get('categoria'),
+        metodo=data.get('metodo'),
+        cartao=data.get('cartao'),
+        conta=data.get('conta'),
+        timestamp=data.get('timestamp', datetime.now().isoformat())
+    )
+    db.session.add(nova_transacao)
+    db.session.commit()
 
 def apagar_transacao_db(user_id, timestamp):
-    transacoes = get_transacoes_db(user_id)
-    novas_transacoes = [t for t in transacoes if t.get('timestamp') != timestamp]
-    set_user_data(user_id, "transacoes", novas_transacoes)
+    transacao = Transacao.query.filter_by(user_id=user_id, timestamp=timestamp).first()
+    if transacao:
+        db.session.delete(transacao)
+        db.session.commit()
 
+# --- Compras Parceladas ---
 def get_compras_parceladas_db(user_id):
-    return get_user_data(user_id, "parceladas", [])
+    compras_obj = CompraParcelada.query.filter_by(user_id=user_id).all()
+    return [
+        {c.name: getattr(p, c.name) for c in p.__table__.columns}
+        for p in compras_obj
+    ]
 
 def salvar_compra_parcelada_db(user_id, data):
-    compras = get_compras_parceladas_db(user_id)
-    compras.append(data)
-    set_user_data(user_id, "parceladas", compras)
+    nova_compra = CompraParcelada(
+        user_id=user_id,
+        descricao=data.get('descricao'),
+        valor_total=data.get('valor_total'),
+        num_parcelas=data.get('num_parcelas'),
+        cartao=data.get('cartao'),
+        categoria=data.get('categoria'),
+        data_inicio=data.get('data_inicio', datetime.now().isoformat())
+    )
+    db.session.add(nova_compra)
+    db.session.commit()
 
-# --- Configurações (Categorias, Contas, etc.) ---
+# --- Configurações (usando o modelo genérico) ---
 def get_categorias(user_id):
     default = {
         'Pagamentos': ['cartão de crédito', 'fatura', 'pagamento fatura'],
@@ -58,11 +98,7 @@ def apagar_categoria_db(user_id, nome):
 
 def get_contas_conhecidas(user_id):
     default = {'contas': ['Swile', 'Itaú', 'Nubank', 'Inter'], 'cartoes': ['Mercado Pago', 'Nubank', 'Itaú']}
-    user_contas = get_user_data(user_id, "contas", default)
-    if isinstance(user_contas, list): # Auto-correção para formato antigo
-        set_user_data(user_id, "contas", default)
-        return default
-    return user_contas
+    return get_user_data(user_id, "contas", default)
 
 def get_cartoes_conhecidos(user_id):
     return get_contas_conhecidas(user_id).get('cartoes', [])
@@ -87,7 +123,7 @@ def get_regras_cartoes_db(user_id):
 def salvar_regras_cartao_db(user_id, regras):
     regras_atuais = get_regras_cartoes_db(user_id)
     for cartao, dia in regras.items():
-        if str(dia).isdigit(): # Corrigido para verificar se é um dígito
+        if str(dia).isdigit():
             regras_atuais[cartao] = int(dia)
     set_user_data(user_id, "regras_cartoes", regras_atuais)
 
@@ -121,23 +157,15 @@ def apagar_lembrete_db(user_id, timestamp):
     set_user_data(user_id, "lembretes", novos)
 
 # --- Funções de Autenticação e Usuário ---
-
 def salvar_senha_db(user_id, senha):
-    """Salva a senha para um usuário."""
     set_user_data(user_id, "senha", senha)
 
 def verificar_senha_db(user_id, senha):
-    """Verifica se a senha fornecida corresponde à salva no banco."""
     senha_salva = get_user_data(user_id, "senha", None)
-    if not senha_salva:
-        return False
-    return senha_salva == senha
+    return senha_salva is not None and senha_salva == senha
 
 def get_all_user_ids():
-    """Escaneia o banco de dados e retorna uma lista de user_ids únicos."""
-    user_ids = set()
-    transaction_keys = db.prefix("transacoes_")
-    for key in transaction_keys:
-        user_id = key.split('_', 1)[1]
-        user_ids.add(user_id)
-    return sorted(list(user_ids))
+    # Consulta o banco de dados para encontrar todos os user_ids únicos
+    user_ids = db.session.query(ConfiguracaoUsuario.user_id).distinct().all()
+    # A consulta retorna uma lista de tuplas, então extraímos o primeiro elemento de cada
+    return sorted([uid[0] for uid in user_ids])
