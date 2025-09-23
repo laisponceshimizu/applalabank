@@ -17,6 +17,11 @@ def salvar_transacao_db(user_id, data):
     transacoes.append(data)
     set_user_data(user_id, "transacoes", transacoes)
 
+def apagar_transacao_db(user_id, timestamp):
+    transacoes = get_transacoes_db(user_id)
+    novas_transacoes = [t for t in transacoes if t.get('timestamp') != timestamp]
+    set_user_data(user_id, "transacoes", novas_transacoes)
+
 def get_compras_parceladas_db(user_id):
     return get_user_data(user_id, "parceladas", [])
 
@@ -82,7 +87,7 @@ def get_regras_cartoes_db(user_id):
 def salvar_regras_cartao_db(user_id, regras):
     regras_atuais = get_regras_cartoes_db(user_id)
     for cartao, dia in regras.items():
-        if dia.isdigit():
+        if str(dia).isdigit(): # Corrigido para verificar se é um dígito
             regras_atuais[cartao] = int(dia)
     set_user_data(user_id, "regras_cartoes", regras_atuais)
 
@@ -115,3 +120,24 @@ def apagar_lembrete_db(user_id, timestamp):
     novos = [l for l in lembretes if l.get('timestamp') != timestamp]
     set_user_data(user_id, "lembretes", novos)
 
+# --- Funções de Autenticação e Usuário ---
+
+def salvar_senha_db(user_id, senha):
+    """Salva a senha para um usuário."""
+    set_user_data(user_id, "senha", senha)
+
+def verificar_senha_db(user_id, senha):
+    """Verifica se a senha fornecida corresponde à salva no banco."""
+    senha_salva = get_user_data(user_id, "senha", None)
+    if not senha_salva:
+        return False
+    return senha_salva == senha
+
+def get_all_user_ids():
+    """Escaneia o banco de dados e retorna uma lista de user_ids únicos."""
+    user_ids = set()
+    transaction_keys = db.prefix("transacoes_")
+    for key in transaction_keys:
+        user_id = key.split('_', 1)[1]
+        user_ids.add(user_id)
+    return sorted(list(user_ids))

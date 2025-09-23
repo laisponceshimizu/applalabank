@@ -42,7 +42,11 @@
 </head>
 <body>
     <div class="container">
-        <h1>Dashboard Financeiro</h1>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h1>Dashboard Financeiro</h1>
+            <a href="{{ url_for('logout') }}" style="text-decoration: none; background-color: #6c757d; color: white; padding: 0.5em 1em; border-radius: 5px;">Sair</a>
+        </div>
+
         <div class="tabs">
             <button class="tab-link active" onclick="openTab(event, 'Dashboard')">Dashboard</button>
             <button class="tab-link" onclick="openTab(event, 'Extrato')">Extrato</button>
@@ -50,11 +54,15 @@
         </div>
 
         <div id="Dashboard" class="tab-content active">
+            <!-- Conteúdo da Aba Dashboard -->
             <h2>Resumo Geral</h2>
             <div class="summary">
                 <div class="card"><h3 class="receita">Total de Receitas</h3><p class="receita">R$ {{ "%.2f"|format(total_receitas) }}</p></div>
                 <div class="card"><h3 class="despesa">Total de Despesas</h3><p class="despesa">R$ {{ "%.2f"|format(total_despesas) }}</p></div>
-                <div class="card"><h3 class="balanco">Balanço Final</h3><p class="balanco">R$ {{ "%.2f"|format(balanco) }}</p></div>
+                <div class="card">
+                    <h3 class="{{ 'despesa' if balanco < 0 else 'receita' }}">Balanço Final</h3>
+                    <p class="{{ 'despesa' if balanco < 0 else 'receita' }}">R$ {{ "%.2f"|format(balanco) }}</p>
+                </div>
             </div>
             {% if saldos_por_conta %}
             <h2>Saldos por Conta</h2>
@@ -64,7 +72,7 @@
                     <h3>{{ conta }}</h3>
                     <p class="receita" style="font-size: 1em;">Receitas: R$ {{ "%.2f"|format(dados.receitas) }}</p>
                     <p class="despesa" style="font-size: 1em;">Despesas: R$ {{ "%.2f"|format(dados.despesas) }}</p>
-                    <p class="balanco">Saldo: R$ {{ "%.2f"|format(dados.saldo) }}</p>
+                    <p class="{{ 'despesa' if dados.saldo < 0 else 'receita' }}">Saldo: R$ {{ "%.2f"|format(dados.saldo) }}</p>
                 </div>
                 {% endfor %}
             </div>
@@ -77,6 +85,7 @@
         </div>
 
         <div id="Extrato" class="tab-content">
+            <!-- Conteúdo da Aba Extrato -->
             {% if previsao_faturas %}
             <h2>Previsão de Faturas Futuras</h2>
             <table>
@@ -105,6 +114,7 @@
                 <thead>
                     <tr>
                         <th>Data</th><th>Descrição</th><th>Categoria</th><th>Método</th><th>Conta/Cartão</th><th>Tipo</th><th>Valor (R$)</th>
+                        <th>Ação</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -117,6 +127,11 @@
                         <td>{{ transacao.get('conta') or transacao.get('cartao') or 'N/A' }}</td>
                         <td class="{{ transacao.tipo }}">{{ transacao.tipo.capitalize() }}</td>
                         <td class="{{ transacao.tipo }}">{{ "- " if transacao.tipo == 'despesa' else "+ " }}{{ "%.2f"|format(transacao.valor) }}</td>
+                        <td>
+                            {% if transacao.get('is_deletable') %}
+                                <button class="delete-btn" onclick="deleteTransaction('{{ transacao.timestamp }}')">X</button>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -124,6 +139,7 @@
         </div>
 
         <div id="Configuracoes" class="tab-content">
+            <!-- Conteúdo da Aba Configurações -->
             <h2>Configurações</h2>
             <div class="settings-grid">
                 <div class="settings-card">
@@ -307,6 +323,13 @@
             else alert('Erro ao apagar lembrete.');
         }
 
+        async function deleteTransaction(timestamp) {
+            if (!confirm(`Tem certeza que deseja apagar esta transação?`)) return;
+            const response = await postData('/delete_transaction', { user_id: USER_ID, timestamp: timestamp });
+            if (response.ok) window.location.reload();
+            else alert('Erro ao apagar transação.');
+        }
+
         // Script dos Gráficos
         Chart.register(ChartDataLabels);
 
@@ -374,3 +397,4 @@
     </script>
 </body>
 </html>
+

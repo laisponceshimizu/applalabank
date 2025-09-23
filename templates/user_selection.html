@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Seleção de Usuário - Lalabank</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background-color: #f8f9fa; color: #212529; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { max-width: 600px; width: 100%; text-align: center; background-color: white; padding: 3em; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1 { color: #343a40; margin-bottom: 1.5em; }
+        ul { list-style: none; padding: 0; }
+        li { margin: 1em 0; }
+        a { text-decoration: none; color: white; background-color: #0d6efd; font-size: 1.2em; padding: 0.8em 1.5em; border-radius: 5px; display: block; transition: background-color 0.3s; }
+        a:hover { background-color: #0b5ed7; }
+        p { color: #6c757d; }
+        .flash-info { background-color: #d1ecf1; color: #0c5460; padding: 1em; border-radius: 4px; margin-bottom: 1.5em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Selecione um Usuário de Teste</h1>
+
+        <!-- Bloco para exibir mensagens, como "Você foi desconectado." -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    {% if category == 'info' %}
+                        <div class="flash-info">{{ message }}</div>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% if user_ids %}
+            <ul>
+                {% for user_id in user_ids %}
+                <!-- AQUI ESTÁ A ALTERAÇÃO: o link agora aponta para a rota de login -->
+                <li><a href="{{ url_for('login', user_id=user_id) }}">{{ user_id }}</a></li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>Nenhum usuário encontrado. Envie uma mensagem para o bot para começar.</p>
+        {% endif %}
+    </div>
+</body>
+</html>

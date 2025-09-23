@@ -9,12 +9,14 @@ from database import (
     get_user_data, set_user_data,
     salvar_transacao_db, salvar_compra_parcelada_db,
     get_categorias, get_contas_conhecidas, get_cartoes_conhecidos,
-    salvar_lembrete_db, get_lembretes_db, adicionar_conta_db
+    salvar_lembrete_db, get_lembretes_db, adicionar_conta_db,
+    salvar_senha_db, get_transacoes_db, get_compras_parceladas_db
 )
 
 VERIFY_TOKEN = "teste"
 ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
+DASHBOARD_URL = os.environ.get("DASHBOARD_URL") # Carrega a URL do dashboard
 
 def send_whatsapp_message(phone_number, message):
     """
@@ -32,14 +34,26 @@ def send_whatsapp_message(phone_number, message):
         response = requests.post(url, json=data, headers=headers)
         response.raise_for_status()
         print(f"Resposta da API da Meta ao enviar: {response.status_code}")
-        # print(response.json()) # Descomente para depuração detalhada
     except requests.exceptions.RequestException as e:
         print(f"❌ Erro ao enviar mensagem: {e}")
-        print(f"Resposta recebida: {e.response.text if e.response else 'Nenhuma resposta'}")
+        if e.response is not None:
+            print(f"Resposta recebida da Meta: {e.response.json()}")
+        else:
+            print("Nenhuma resposta recebida do servidor.")
 
     return None
 
 # --- Funções de Processamento de Mensagens ---
+
+def processar_comando_senha(user_id, texto):
+    """Processa o comando para definir ou alterar a senha."""
+    partes = texto.split()
+    if len(partes) < 2 or not partes[1]:
+        return "❌ Formato inválido. Use: senha [sua_senha_aqui]"
+
+    nova_senha = partes[1]
+    salvar_senha_db(user_id, nova_senha)
+    return "✅ Senha definida com sucesso! Use esta senha para acessar seu dashboard na web."
 
 def processar_mensagem(user_id, texto):
     """
@@ -47,7 +61,79 @@ def processar_mensagem(user_id, texto):
     """
     texto_lower = texto.lower()
 
+    # --- Lógica para Resetar Usuário (PARA TESTES) ---
+    if texto_lower == "resetar meus dados":
+        return (
+            "⚠️ ATENÇÃO! ⚠️",
+            "Você tem certeza que deseja apagar TODOS os seus dados? Esta ação não pode ser desfeita.",
+            "Para confirmar, envie: `sim apagar tudo`"
+        )
+
+    if texto_lower == "sim apagar tudo":
+        chaves_para_apagar = [
+           "transacoes", "parceladas", "categorias", "contas",
+           "regras_cartoes", "metas", "lembretes", "senha", "ultima_pergunta"
+        ]
+        for chave in chaves_para_apagar:
+            chave_db = f"{chave}_{user_id}"
+            if chave_db in db:
+                del db[chave_db]
+        return "✅ Seus dados foram apagados com sucesso. Sua próxima mensagem será tratada como um novo usuário."
+
+    # --- Lógica de Boas-Vindas baseada na existência de senha ---
+    senha_definida = get_user_data(user_id, "senha", None)
+
+    if not senha_definida:
+        if texto_lower.startswith("senha "):
+            # Se a primeira interação é definir a senha, processa e dá as boas-vindas
+            resposta_senha = processar_comando_senha(user_id, texto)
+            return (
+                "Olá! Bem-vindo(a) ao Lalabank! 👋",
+                resposta_senha,
+                "Agora você pode começar a registrar suas finanças!\n\n"
+                "Digite `dashboard` para receber o link de acesso ou `ajuda` para ver todos os comandos."
+            )
+        else:
+            # Se for qualquer outra mensagem, instrui a criar a senha e ignora a mensagem atual
+            return (
+                "Olá! Bem-vindo(a) ao Lalabank, seu assistente financeiro pessoal! 👋",
+                "Para começar e garantir a segurança dos seus dados, o primeiro passo é criar uma senha.",
+                "Por favor, envie uma mensagem no seguinte formato:\n`senha sua_senha_aqui`"
+            )
+
+    # --- Se a senha já existe, o usuário não é novo. Processa comandos normalmente. ---
+
+    # --- Lógica para comando de ajuda ---
+    if texto_lower == "ajuda":
+        link_dashboard = f"{DASHBOARD_URL}/login/{user_id}" if DASHBOARD_URL else "O link do dashboard não está configurado."
+        mensagem_ajuda = (
+            "Aqui estão os comandos que você pode usar:\n\n"
+            "*Finanças:*\n"
+            "- Para registrar um gasto: `gastei 50 no mercado com o cartão Nubank`\n"
+            "- Para registrar uma receita: `recebi 1000 de salário no Itaú`\n\n"
+            "*Recursos:*\n"
+            "- Para compras parceladas, digite `parcelado`.\n"
+            "- Para lembretes de contas, digite `lembrete`.\n"
+            "- Para definir uma meta de gastos: `meta Alimentação 800`\n\n"
+            "*Conta:*\n"
+            "- Para alterar sua senha: `senha [nova_senha]`\n"
+            f"- Para acessar seu dashboard: {link_dashboard}"
+        )
+        return mensagem_ajuda
+
     # --- Lógica para Comandos Específicos ---
+    if texto_lower in ["dashboard", "link"]:
+        if not DASHBOARD_URL:
+            return "❌ O administrador ainda não configurou a URL do dashboard."
+        link_dashboard = f"{DASHBOARD_URL}/login/{user_id}"
+        return (
+            "Aqui está o seu link de acesso pessoal ao dashboard:",
+            link_dashboard
+        )
+
+    if texto_lower.startswith("senha "):
+        return processar_comando_senha(user_id, texto)
+
     if texto_lower.startswith("meta "):
         return processar_comando_meta(user_id, texto)
 
@@ -120,7 +206,6 @@ def processar_comando_meta(user_id, texto):
     except (ValueError, IndexError):
         return "❌ Formato inválido. Use: meta [categoria] [valor]"
 
-
 def processar_resposta_pergunta(user_id, texto_resposta, ultima_pergunta):
     set_user_data(user_id, "ultima_pergunta", None) # Limpa a pergunta
 
@@ -134,7 +219,6 @@ def processar_resposta_pergunta(user_id, texto_resposta, ultima_pergunta):
         # Adicionar lógica para nova categoria aqui se necessário
 
     return "Ok, não vou adicionar."
-
 
 def gerar_modelo_parcelado(user_id):
     """Gera as duas mensagens de instrução para compras parceladas."""
@@ -193,18 +277,31 @@ def processar_transacao_normal(user_id, texto):
     tipo, valor, descricao_original, metodo, cartao, conta = extrair_dados_transacao_normal(user_id, texto)
 
     if valor is None:
-        # CORREÇÃO DO BUG: Verifica se o valor foi encontrado antes de prosseguir
-        match_valor_unico = re.search(r'^[\d,.]+$', texto.strip())
-        if match_valor_unico:
-            return "Não entendi sua mensagem. Para registar, diga algo como 'Gastei 10 reais com pão'."
         return "Não consegui identificar um valor na sua mensagem. Tente novamente."
 
-    categoria = categorizar_transacao(descricao_original, tipo, user_id)
+    # --- NOVA VALIDAÇÃO ---
+    if tipo == 'despesa':
+        if metodo == 'outro':
+            return ("Faltou o método de pagamento. Tente de novo, especificando se foi `débito` ou `crédito`.\n\n"
+                    "Ex: `gastei 50 no mercado com o cartão Nubank`")
+        if metodo == 'crédito' and cartao is None:
+            cartoes = get_cartoes_conhecidos(user_id)
+            return (f"Você usou crédito, mas não disse qual cartão. Por favor, tente de novo.\n\n"
+                    f"Cartões disponíveis: {', '.join(cartoes)}\n"
+                    f"Ex: `gastei 50 no mercado com o cartão {cartoes[0] if cartoes else 'Nubank'}`")
+        if metodo == 'débito' and conta is None:
+            contas = get_contas_conhecidas(user_id).get('contas', [])
+            return (f"Você usou débito, mas não disse de qual conta. Por favor, tente de novo.\n\n"
+                    f"Contas disponíveis: {', '.join(contas)}\n"
+                    f"Ex: `paguei 50 no mercado com a conta {contas[0] if contas else 'Itaú'}`")
 
-    # Lógica para perguntar sobre contas/categorias desconhecidas...
     if tipo == 'receita' and conta is None:
-        # Lógica para perguntar sobre nova conta
-        pass # Implementação futura
+        contas = get_contas_conhecidas(user_id).get('contas', [])
+        return (f"Faltou dizer em qual conta a receita entrou. Por favor, tente de novo.\n\n"
+                f"Contas disponíveis: {', '.join(contas)}\n"
+                f"Ex: `recebi 1000 de salário na conta {contas[0] if contas else 'Itaú'}`")
+
+    categoria = categorizar_transacao(descricao_original, tipo, user_id)
 
     transacao_data = {
         "tipo": tipo, "descricao": descricao_original, "valor": valor,
@@ -228,38 +325,57 @@ def extrair_dados_transacao_normal(user_id, texto):
     if any(p in texto_lower for p in palavras_despesa): tipo = 'despesa'
     elif any(p in texto_lower for p in palavras_receita): tipo = 'receita'
 
-    # Expressão regular mais robusta para encontrar valores monetários
-    match_valor = re.search(r'[\d,.]+', texto)
-    if match_valor and match_valor.group(0) not in ['.', ',']:
-        try:
-            valor = float(match_valor.group(0).replace(',', '.'))
-        except ValueError:
-            valor = None # Se a conversão falhar, o valor continua nulo
+    # --- LÓGICA DE EXTRAÇÃO DE VALOR MELHORADA ---
+    valor = None
+    # Regex para encontrar valores como 10, 10.50, 10,50, 2k, 2mil, 1.5k
+    match_valor = re.search(r'([\d,]+(?:[.,]\d+)?)(\s*(k|mil))?', texto_lower, re.IGNORECASE)
 
-    if tipo == 'receita':
+    if match_valor:
+        try:
+            numero_str = match_valor.group(1).replace(',', '.')
+            numero = float(numero_str)
+            sufixo = match_valor.group(3)
+
+            if sufixo and sufixo.lower() in ['k', 'mil']:
+                numero *= 1000
+
+            valor = numero
+        except (ValueError, IndexError):
+            valor = None # Se a conversão falhar, continua nulo
+
+    # Define o método primeiro, pois é mais explícito
+    if 'crédito' in texto_lower or 'cartao' in texto_lower or 'cartão' in texto_lower:
+        metodo = 'crédito'
+    elif 'débito' in texto_lower or 'pix' in texto_lower:
         metodo = 'débito'
+
+    # Se o método for crédito, procura por um cartão conhecido
+    if metodo == 'crédito':
+        cartoes = get_cartoes_conhecidos(user_id)
+        for c in cartoes:
+            if c.lower() in texto_lower:
+                cartao = c
+                break
+    # Se for débito ou receita, procura por uma conta conhecida
+    elif metodo == 'débito' or tipo == 'receita':
+        metodo = 'débito' # Garante que receitas sejam marcadas como débito (entrada em conta)
         contas = get_contas_conhecidas(user_id).get('contas', [])
         for c in contas:
             if c.lower() in texto_lower:
                 conta = c
                 break
-    elif tipo == 'despesa':
-        if 'crédito' in texto_lower or 'cartao' in texto_lower or 'cartão' in texto_lower:
-            metodo = 'crédito'
-            cartoes = get_cartoes_conhecidos(user_id)
-            for c in cartoes:
-                if c.lower() in texto_lower:
-                    cartao = c
-                    break
-        elif 'débito' in texto_lower or 'pix' in texto_lower or 'swile' in texto_lower:
-            metodo = 'débito'
+
+    # Caso especial para "pagamento de fatura", que é sempre débito
+    if categorizar_transacao(texto, 'despesa', user_id) == 'Pagamentos':
+        metodo = 'débito'
+        # Tenta identificar a conta do pagamento da fatura
+        if not conta:
             contas = get_contas_conhecidas(user_id).get('contas', [])
             for c in contas:
                 if c.lower() in texto_lower:
                     conta = c
                     break
 
-    if categorizar_transacao(texto, 'despesa', user_id) == 'Pagamentos': metodo = 'débito'
     return tipo, valor, texto, metodo, cartao, conta
 
 def categorizar_transacao(descricao, tipo, user_id):

@@ -1,20 +1,36 @@
-from flask import Flask, request, make_response, render_template
+from flask import Flask, request, make_response, render_template, session, redirect, url_for, flash
 
 # Importa as funções dos nossos novos arquivos
 from utils import processar_mensagem, send_whatsapp_message, verificar_e_enviar_lembretes
 from database import (
     salvar_meta_db, apagar_categoria_db, apagar_conta_db, 
     adicionar_conta_db, adicionar_categoria_db, apagar_meta_db,
-    salvar_regras_cartao_db, apagar_lembrete_db
+    salvar_regras_cartao_db, apagar_lembrete_db, apagar_transacao_db,
+    get_all_user_ids,
+    verificar_senha_db
 )
 from dashboard_calculations import calcular_dados_dashboard
 
 app = Flask(__name__)
+# ADICIONE UMA CHAVE SECRETA PARA GERENCIAR SESSÕES
+# Troque por uma string aleatória e segura em um ambiente real
+app.secret_key = 'sua-chave-secreta-muito-segura'
 
 @app.route("/webhook", methods=['GET', 'POST'])
 def webhook():
+    # --- NOVO LOG PARA DEPURAR ---
+    print(f"\n--- Webhook Recebido ---")
+    print(f"Método: {request.method}")
+    print(f"Headers: {request.headers}")
+    print(f"Dados brutos: {request.data}")
+    # --- FIM DO NOVO LOG ---
+
     if request.method == 'POST':
         data = request.get_json()
+        if data is None:
+            print("AVISO: Recebido POST request sem JSON.")
+            return make_response("EVENT_RECEIVED", 200)
+
         try:
             message_data = data['entry'][0]['changes'][0]['value']['messages'][0]
             if message_data['type'] == 'text':
@@ -31,6 +47,7 @@ def webhook():
                         send_whatsapp_message(phone_number, resposta_bot)
 
         except (KeyError, IndexError):
+            # Ignora eventos que não são mensagens de texto (ex: status de entrega)
             pass 
 
         return make_response("EVENT_RECEIVED", 200)
@@ -46,11 +63,32 @@ def webhook():
 @app.route("/")
 @app.route("/dashboard")
 def dashboard_home():
-    user_id = "554398091663" 
-    return dashboard(user_id)
+    user_ids = get_all_user_ids()
+    return render_template('user_selection.html', user_ids=user_ids)
+
+@app.route("/login/<user_id>", methods=['GET', 'POST'])
+def login(user_id):
+    if request.method == 'POST':
+        senha = request.form.get('senha')
+        if verificar_senha_db(user_id, senha):
+            session['authenticated_user'] = user_id
+            return redirect(url_for('dashboard', user_id=user_id))
+        else:
+            flash('Senha incorreta. Tente novamente.', 'error')
+
+    return render_template('login.html', user_id=user_id)
+
+@app.route("/logout")
+def logout():
+    session.pop('authenticated_user', None)
+    flash('Você foi desconectado.', 'info')
+    return redirect(url_for('dashboard_home'))
 
 @app.route("/dashboard/<user_id>")
 def dashboard(user_id):
+    if 'authenticated_user' not in session or session['authenticated_user'] != user_id:
+        return redirect(url_for('login', user_id=user_id))
+
     dados_dashboard = calcular_dados_dashboard(user_id)
     return render_template('dashboard.html', **dados_dashboard)
 
@@ -108,6 +146,12 @@ def delete_lembrete():
     data = request.get_json()
     apagar_lembrete_db(data['user_id'], data['timestamp'])
     return make_response("Lembrete apagado", 200)
+
+@app.route("/delete_transaction", methods=['POST'])
+def delete_transaction():
+    data = request.get_json()
+    apagar_transacao_db(data['user_id'], data['timestamp'])
+    return make_response("Transação apagada", 200)
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=8080)
