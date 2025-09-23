@@ -28,6 +28,7 @@ class CompraParcelada(db.Model):
     categoria = db.Column(db.String(100))
     data_inicio = db.Column(db.String(100), default=lambda: datetime.now().isoformat())
 
+# --- CLASSE QUE ESTAVA FALTANDO ---
 # Modelo Genérico para guardar configurações, senhas, metas, etc.
 class ConfiguracaoUsuario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
