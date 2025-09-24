@@ -118,16 +118,29 @@ def apagar_conta_db(user_id, nome):
     if nome in contas.get('cartoes', []): contas['cartoes'].remove(nome)
     set_user_data(user_id, "contas", contas)
 
+# --- INÍCIO DAS ALTERAÇÕES ---
 def get_regras_cartoes_db(user_id):
-    default = {'Mercado Pago': 28, 'Nubank': 25, 'Itaú': 20}
-    return get_user_data(user_id, "regras_cartoes", default)
+    # Novo padrão com fechamento e vencimento
+    default = {
+        'Mercado Pago': {'fechamento': 28, 'vencimento': 7},
+        'Nubank': {'fechamento': 25, 'vencimento': 4},
+        'Itaú': {'fechamento': 20, 'vencimento': 1}
+    }
+    # Use uma nova chave para evitar conflitos com dados antigos
+    return get_user_data(user_id, "regras_cartoes_v2", default)
 
 def salvar_regras_cartao_db(user_id, regras):
     regras_atuais = get_regras_cartoes_db(user_id)
-    for cartao, dia in regras.items():
-        if str(dia).isdigit():
-            regras_atuais[cartao] = int(dia)
-    set_user_data(user_id, "regras_cartoes", regras_atuais)
+    for cartao, datas in regras.items():
+        # Verifica se os valores de fechamento e vencimento são dígitos
+        if str(datas.get('fechamento')).isdigit() and str(datas.get('vencimento')).isdigit():
+            regras_atuais[cartao] = {
+                'fechamento': int(datas['fechamento']),
+                'vencimento': int(datas['vencimento'])
+            }
+    # Salva na nova chave
+    set_user_data(user_id, "regras_cartoes_v2", regras_atuais)
+# --- FIM DAS ALTERAÇÕES ---
 
 # --- Metas ---
 def get_metas_db(user_id):
