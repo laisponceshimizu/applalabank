@@ -1,14 +1,12 @@
-# dashboard_calculations.py
-
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from database import (
-    get_transacoes_db, get_compras_parceladas_db, get_metas_db, 
+    get_transacoes_db, get_compras_parceladas_db, get_metas_db,
     get_contas_conhecidas, get_categorias, get_regras_cartoes_db,
     get_cartoes_conhecidos, get_lembretes_db
 )
 
-# --- Funções Auxiliares (sem alteração) ---
+# --- Funções Auxiliares (sem alteração no corpo, mas adaptadas para novo formato de regras) ---
 def _calcular_parcelas_do_mes(compras_parceladas, regras_cartoes):
     hoje = datetime.now()
     parcelas_do_mes = []
@@ -18,7 +16,8 @@ def _calcular_parcelas_do_mes(compras_parceladas, regras_cartoes):
 
         for i in range(compra['num_parcelas']):
             dia_compra = data_inicio.day
-            dia_fechamento = regras_cartoes.get(compra.get("cartao", ""), 30)
+            # Adapta para pegar 'fechamento' do dicionário
+            dia_fechamento = regras_cartoes.get(compra.get("cartao"), {}).get('fechamento', 30)
             mes_inicio_fatura = 0 if dia_compra <= dia_fechamento else 1
             data_parcela_fatura = data_inicio + relativedelta(months=i + mes_inicio_fatura)
 
@@ -63,7 +62,8 @@ def _calcular_previsao_faturas(compras_parceladas, contas_conhecidas, regras_car
         valor_parcela = compra['valor_total'] / compra['num_parcelas']
         num_parcelas = compra['num_parcelas']
         
-        dia_fechamento = regras_cartoes.get(cartao, 30)
+        # Adapta para pegar 'fechamento' do dicionário
+        dia_fechamento = regras_cartoes.get(cartao, {}).get('fechamento', 30)
         mes_inicio_fatura = 0 if data_inicio.day <= dia_fechamento else 1
 
         for i in range(num_parcelas):
@@ -88,14 +88,14 @@ def _calcular_progresso_metas(transacoes_completas, metas):
     return progresso_metas
 
 
-# --- Função Principal (COM A CORREÇÃO) ---
+# --- Função Principal (COM A NOVA LÓGICA DE LEMBRETES) ---
 def calcular_dados_dashboard(user_id):
     transacoes_normais = [dict(t) for t in get_transacoes_db(user_id)]
     for t in transacoes_normais:
         t['is_deletable'] = True
 
     compras_parceladas = [dict(p) for p in get_compras_parceladas_db(user_id)]
-    lembretes = [dict(l) for l in get_lembretes_db(user_id)]
+    lembretes_manuais = [dict(l) for l in get_lembretes_db(user_id)]
     metas = dict(get_metas_db(user_id))
     regras_cartoes = dict(get_regras_cartoes_db(user_id))
     contas_data = get_contas_conhecidas(user_id)
@@ -105,7 +105,7 @@ def calcular_dados_dashboard(user_id):
     }
     categorias_data = get_categorias(user_id)
     categorias_usuario = {k: list(v) for k, v in categorias_data.items()}
-
+    
     parcelas_do_mes = _calcular_parcelas_do_mes(compras_parceladas, regras_cartoes)
     for p in parcelas_do_mes:
         p['is_deletable'] = False
@@ -131,26 +131,43 @@ def calcular_dados_dashboard(user_id):
 
     previsao_faturas, meses_previsao_nomes = _calcular_previsao_faturas(compras_parceladas, contas_conhecidas, regras_cartoes)
 
-    # --- INÍCIO DA CORREÇÃO ---
-    # Adiciona as compras à vista no crédito na previsão da fatura do mês atual
     hoje = datetime.now()
-    mes_atual_str = hoje.strftime('%b/%y')
     despesas_credito_a_vista = [t for t in transacoes_normais if t.get('metodo') == 'crédito' and t.get('tipo') == 'despesa']
     
     for t in despesas_credito_a_vista:
         cartao = t.get('cartao')
         if cartao and cartao in previsao_faturas:
-            # Verifica em qual fatura a compra deve entrar
             dia_compra = datetime.fromisoformat(t['timestamp']).day
-            dia_fechamento = regras_cartoes.get(cartao, 30)
+            dia_fechamento = regras_cartoes.get(cartao, {}).get('fechamento', 30)
             mes_fatura = hoje if dia_compra <= dia_fechamento else hoje + relativedelta(months=1)
             mes_fatura_str = mes_fatura.strftime('%b/%y')
 
             if mes_fatura_str in previsao_faturas[cartao]:
                 previsao_faturas[cartao][mes_fatura_str] += t.get('valor', 0)
-    # --- FIM DA CORREÇÃO ---
 
     progresso_metas = _calcular_progresso_metas(transacoes_completas, metas)
+
+    # --- INÍCIO DA NOVA LÓGICA DE LEMBRETES AUTOMÁTICOS ---
+    lembretes_automaticos = []
+    # Fatura do mês atual (que fecha neste mês)
+    mes_atual_fatura_str = hoje.strftime('%b/%y')
+    
+    for cartao, faturas in previsao_faturas.items():
+        valor_fatura_atual = faturas.get(mes_atual_fatura_str, 0)
+        
+        if valor_fatura_atual > 0:
+            dia_vencimento = regras_cartoes.get(cartao, {}).get('vencimento')
+            if dia_vencimento:
+                lembretes_automaticos.append({
+                    "descricao": f"Fatura Cartão {cartao}",
+                    "valor": valor_fatura_atual,
+                    "dia_vencimento": dia_vencimento,
+                    "is_deletable": False # Para não mostrar o botão 'X'
+                })
+    
+    # Combina os lembretes manuais e os automáticos, e ordena por dia do vencimento
+    lembretes_combinados = sorted(lembretes_manuais + lembretes_automaticos, key=lambda x: x.get('dia_vencimento', 99))
+    # --- FIM DA NOVA LÓGICA ---
 
     return {
         'user_id': user_id, 'transacoes': transacoes_completas, 'total_receitas': total_receitas,
@@ -159,6 +176,7 @@ def calcular_dados_dashboard(user_id):
         'total_gastos_credito': total_gastos_credito, 'saldos_por_conta': saldos_por_conta,
         'faturas': faturas_atuais, 'previsao_faturas': previsao_faturas, 'meses_previsao': meses_previsao_nomes,
         'progresso_metas': progresso_metas, 'categorias_disponiveis': categorias_usuario,
-        'contas_disponiveis': contas_conhecidas, 'metas': metas, 'lembretes': lembretes,
+        'contas_disponiveis': contas_conhecidas, 'metas': metas, 
+        'lembretes': lembretes_combinados, # Passa a lista combinada para o template
         'regras_cartoes': regras_cartoes
     }
