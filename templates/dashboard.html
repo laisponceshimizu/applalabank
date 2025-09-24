@@ -29,7 +29,6 @@
         .tab-content { display: none; }
         .tab-content.active { display: block; animation: fadeIn 0.5s; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        /* Estilos para formulários e listas de configurações */
         .settings-list { list-style: none; padding: 0; max-height: 250px; overflow-y: auto; }
         .settings-list li { display: flex; justify-content: space-between; align-items: center; padding: 0.8em; border-bottom: 1px solid #eee; }
         .settings-list li span { font-size: 0.9em; color: #6c757d; margin-left: 1em; }
@@ -54,7 +53,6 @@
         </div>
 
         <div id="Dashboard" class="tab-content active">
-            <!-- Conteúdo da Aba Dashboard -->
             <h2>Resumo Geral</h2>
             <div class="summary">
                 <div class="card"><h3 class="receita">Total de Receitas</h3><p class="receita">R$ {{ "%.2f"|format(total_receitas) }}</p></div>
@@ -85,7 +83,6 @@
         </div>
 
         <div id="Extrato" class="tab-content">
-            <!-- Conteúdo da Aba Extrato -->
             {% if previsao_faturas %}
             <h2>Previsão de Faturas Futuras</h2>
             <table>
@@ -139,7 +136,6 @@
         </div>
 
         <div id="Configuracoes" class="tab-content">
-            <!-- Conteúdo da Aba Configurações -->
             <h2>Configurações</h2>
             <div class="settings-grid">
                 <div class="settings-card">
@@ -192,11 +188,15 @@
                 </div>
                 <div class="settings-card">
                     <h3>Regras dos Cartões</h3>
+                    <p style="font-size: 0.8em; color: #6c757d;">Defina os dias de fechamento e vencimento de cada fatura.</p>
                     <form id="card-rules-form">
-                        {% for cartao in contas_disponiveis.contas %}
+                        {% for cartao in contas_disponiveis.cartoes %}
                         <div class="form-group card-rules-grid">
-                            <label for="fechamento-{{cartao}}">{{cartao}} - Dia Fecho:</label>
-                            <input type="number" id="fechamento-{{cartao}}" value="{{ regras_cartoes.get(cartao, '') }}" min="1" max="31">
+                            <label for="fechamento-{{cartao}}">{{cartao}}:</label>
+                            <div style="display: flex; gap: 5px;">
+                                <input type="number" id="fechamento-{{cartao}}" placeholder="Dia Fecho." value="{{ regras_cartoes.get(cartao, {}).get('fechamento', '') }}" min="1" max="31">
+                                <input type="number" id="vencimento-{{cartao}}" placeholder="Dia Venc." value="{{ regras_cartoes.get(cartao, {}).get('vencimento', '') }}" min="1" max="31">
+                            </div>
                         </div>
                          {% endfor %}
                         <div class="form-group">
@@ -204,7 +204,7 @@
                         </div>
                     </form>
                 </div>
-                 <div class="settings-card">
+                <div class="settings-card">
                     <h3>Gerir Lembretes</h3>
                      <ul class="settings-list">
                         {% for lembrete in lembretes %}
@@ -213,12 +213,14 @@
                                 <strong>{{ lembrete.descricao }}</strong><br>
                                 <span>R$ {{ "%.2f"|format(lembrete.valor) }} - Vence dia {{ lembrete.dia_vencimento }}</span>
                             </div>
-                            <button class="delete-btn" onclick="deleteLembrete('{{ lembrete.timestamp }}')">X</button>
+                            {% if lembrete.get('is_deletable', true) %}
+                                <button class="delete-btn" onclick="deleteLembrete('{{ lembrete.timestamp }}')">X</button>
+                            {% endif %}
                         </li>
                         {% endfor %}
                     </ul>
                 </div>
-            </div>
+                </div>
         </div>
     </div>
 
@@ -299,13 +301,20 @@
             else alert('Erro ao apagar meta.');
         }
 
+        // --- FUNÇÃO JAVASCRIPT ATUALIZADA ---
         document.getElementById('card-rules-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const regras = {};
-            const cartoes = {{ contas_disponiveis.contas|tojson|safe }};
+            const cartoes = {{ contas_disponiveis.cartoes|tojson|safe }};
             cartoes.forEach(cartao => {
-                const value = document.getElementById(`fechamento-${cartao}`).value;
-                if(value) regras[cartao] = parseInt(value, 10);
+                const fechamento = document.getElementById(`fechamento-${cartao}`).value;
+                const vencimento = document.getElementById(`vencimento-${cartao}`).value;
+                if(fechamento && vencimento) {
+                    regras[cartao] = {
+                        fechamento: parseInt(fechamento, 10),
+                        vencimento: parseInt(vencimento, 10)
+                    };
+                }
             });
             const response = await postData('/save_card_rules', { user_id: USER_ID, regras: regras });
             if (response.ok) {
@@ -397,4 +406,3 @@
     </script>
 </body>
 </html>
-
