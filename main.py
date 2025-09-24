@@ -164,15 +164,6 @@ def delete_transaction():
     apagar_transacao_db(data['user_id'], data['timestamp'])
     return make_response("Transação apagada", 200)
 
-# --- CÓDIGO TEMPORÁRIO ADICIONADO AQUI ---
-# ROTA TEMPORÁRIA PARA CRIAR AS TABELAS DO BANCO DE DADOS NO RENDER
-@app.route('/criar-banco-de-dados-lalabank-12345')
-def criar_banco():
-    with app.app_context():
-        db.create_all()
-    return "As tabelas do banco de dados foram criadas com sucesso! Você já pode remover esta rota do seu código."
-# --- FIM DO CÓDIGO TEMPORÁRIO ---
-
 if __name__ == "__main__":
     # Esta parte é para rodar localmente, o Render usará o gunicorn
     app.run(host='0.0.0.0', port=5000)
