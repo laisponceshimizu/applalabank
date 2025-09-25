@@ -2,25 +2,20 @@ from flask import Flask, request, make_response, render_template, session, redir
 from flask_sqlalchemy import SQLAlchemy
 import os
 
-# --- INÍCIO DAS MODIFICAÇÕES PARA O RENDER ---
-
 # 1. Inicializa o app Flask
 app = Flask(__name__)
 
-# 2. Configura a chave secreta e a URL do banco de dados a partir das variáveis de ambiente
-#    Você vai configurar estas variáveis no painel do Render.
+# 2. Configura a chave secreta e a URL do banco de dados
 app.secret_key = os.environ.get('SECRET_KEY', 'uma-chave-padrao-para-desenvolvimento')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# 3. Inicializa o SQLAlchemy para conectar o app ao banco de dados
+# 3. Inicializa o SQLAlchemy
 db = SQLAlchemy(app)
 
-# --- FIM DAS MODIFICAÇÕES PARA O RENDER ---
-
-
 # Importa as funções dos outros arquivos
-from utils import processar_mensagem, send_whatsapp_message, verificar_e_enviar_lembretes
+# --- ALTERAÇÃO: Removido 'verificar_e_enviar_lembretes' ---
+from utils import processar_mensagem, send_whatsapp_message
 from database import (
     salvar_meta_db, apagar_categoria_db, apagar_conta_db,
     adicionar_conta_db, adicionar_categoria_db, apagar_meta_db,
@@ -38,31 +33,22 @@ def webhook():
     if request.method == 'POST':
         data = request.get_json()
         if data is None:
-            print("AVISO: Recebido POST request sem JSON.")
             return make_response("EVENT_RECEIVED", 200)
-
         try:
             message_data = data['entry'][0]['changes'][0]['value']['messages'][0]
             if message_data['type'] == 'text':
                 phone_number = message_data['from']
                 message_body = message_data['text']['body']
-
                 resposta_bot = processar_mensagem(phone_number, message_body)
-
                 if resposta_bot:
                     if isinstance(resposta_bot, tuple):
                         for msg in resposta_bot:
                             send_whatsapp_message(phone_number, msg)
                     else:
                         send_whatsapp_message(phone_number, resposta_bot)
-
         except (KeyError, IndexError):
             print(f"✅ Notificação recebida, mas não é uma mensagem de texto. Ignorando.")
-            print(f"Dados completos recebidos: {data}")
-
-
         return make_response("EVENT_RECEIVED", 200)
-
     elif request.method == 'GET':
         from utils import VERIFY_TOKEN
         token_sent = request.args.get("hub.verify_token")
@@ -86,7 +72,6 @@ def login(user_id):
             return redirect(url_for('dashboard', user_id=user_id))
         else:
             flash('Senha incorreta. Tente novamente.', 'error')
-
     return render_template('login.html', user_id=user_id)
 
 @app.route("/logout")
@@ -99,17 +84,16 @@ def logout():
 def dashboard(user_id):
     if 'authenticated_user' not in session or session['authenticated_user'] != user_id:
         return redirect(url_for('login', user_id=user_id))
-
     dados_dashboard = calcular_dados_dashboard(user_id)
     return render_template('dashboard.html', **dados_dashboard)
 
-@app.route("/check_reminders")
-def check_reminders():
-    verificar_e_enviar_lembretes()
-    return "Verificação de lembretes concluída."
+# --- ALTERAÇÃO: Rota e função de lembretes removida temporariamente ---
+# @app.route("/check_reminders")
+# def check_reminders():
+#     verificar_e_enviar_lembretes()
+#     return "Verificação de lembretes concluída."
 
 # --- Rotas para a Aba de Configurações ---
-
 @app.route("/add_category", methods=['POST'])
 def add_category():
     data = request.get_json()
@@ -164,35 +148,22 @@ def delete_transaction():
     apagar_transacao_db(data['user_id'], data['timestamp'])
     return make_response("Transação apagada", 200)
 
-# --- ROTA ADICIONADA PARA ATUALIZAR TRANSAÇÕES ---
 @app.route("/update_transaction", methods=['POST'])
 def update_transaction():
     data = request.get_json()
-    # Acessa a transação pelo ID
     transacao = Transacao.query.get(data['id'])
-    
-    # Verifica se a transação existe e pertence ao usuário logado
     if not transacao or transacao.user_id != data['user_id']:
         return make_response("Transação não encontrada", 404)
-
-    # Atualiza os campos com os novos valores do dashboard
     transacao.categoria = data.get('categoria')
     transacao.metodo = data.get('metodo')
-    
-    # Zera os campos de conta/cartão para evitar dados inconsistentes
     transacao.conta = None
     transacao.cartao = None
-    
-    # Define o campo correto baseado no método selecionado
     if transacao.metodo == 'débito':
         transacao.conta = data.get('conta_cartao')
     elif transacao.metodo == 'crédito':
         transacao.cartao = data.get('conta_cartao')
-
-    # Salva as alterações no banco de dados
     db.session.commit()
     return make_response("Transação atualizada", 200)
 
 if __name__ == "__main__":
-    # Esta parte é para rodar localmente, o Render usará o gunicorn
     app.run(host='0.0.0.0', port=5000)
