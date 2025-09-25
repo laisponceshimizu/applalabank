@@ -6,7 +6,7 @@ from database import (
     get_cartoes_conhecidos, get_lembretes_db
 )
 
-# --- Funções Auxiliares (sem alteração no corpo, mas adaptadas para novo formato de regras) ---
+# --- Funções Auxiliares (sem alteração) ---
 def _calcular_parcelas_do_mes(compras_parceladas, regras_cartoes):
     hoje = datetime.now()
     parcelas_do_mes = []
@@ -16,7 +16,6 @@ def _calcular_parcelas_do_mes(compras_parceladas, regras_cartoes):
 
         for i in range(compra['num_parcelas']):
             dia_compra = data_inicio.day
-            # Adapta para pegar 'fechamento' do dicionário
             dia_fechamento = regras_cartoes.get(compra.get("cartao"), {}).get('fechamento', 30)
             mes_inicio_fatura = 0 if dia_compra <= dia_fechamento else 1
             data_parcela_fatura = data_inicio + relativedelta(months=i + mes_inicio_fatura)
@@ -62,7 +61,6 @@ def _calcular_previsao_faturas(compras_parceladas, contas_conhecidas, regras_car
         valor_parcela = compra['valor_total'] / compra['num_parcelas']
         num_parcelas = compra['num_parcelas']
         
-        # Adapta para pegar 'fechamento' do dicionário
         dia_fechamento = regras_cartoes.get(cartao, {}).get('fechamento', 30)
         mes_inicio_fatura = 0 if data_inicio.day <= dia_fechamento else 1
 
@@ -88,7 +86,7 @@ def _calcular_progresso_metas(transacoes_completas, metas):
     return progresso_metas
 
 
-# --- Função Principal (COM A NOVA LÓGICA DE LEMBRETES) ---
+# --- Função Principal ---
 def calcular_dados_dashboard(user_id):
     transacoes_normais = [dict(t) for t in get_transacoes_db(user_id)]
     for t in transacoes_normais:
@@ -96,21 +94,29 @@ def calcular_dados_dashboard(user_id):
 
     compras_parceladas = [dict(p) for p in get_compras_parceladas_db(user_id)]
     lembretes_manuais = [dict(l) for l in get_lembretes_db(user_id)]
-    metas = dict(get_metas_db(user_id))
+    
+    # --- ALTERAÇÃO 1: Ordena as metas por nome da categoria ---
+    metas_data = get_metas_db(user_id)
+    metas = dict(sorted(metas_data.items()))
+    
     regras_cartoes = dict(get_regras_cartoes_db(user_id))
     contas_data = get_contas_conhecidas(user_id)
+    
+    # --- ALTERAÇÃO 2: Ordena as listas de contas e cartões ---
     contas_conhecidas = {
-        'contas': list(contas_data.get('contas', [])),
-        'cartoes': list(contas_data.get('cartoes', []))
+        'contas': sorted(list(contas_data.get('contas', []))),
+        'cartoes': sorted(list(contas_data.get('cartoes', [])))
     }
+
+    # --- ALTERAÇÃO 3: Ordena o dicionário de categorias pelo nome ---
     categorias_data = get_categorias(user_id)
-    categorias_usuario = {k: list(v) for k, v in categorias_data.items()}
+    categorias_usuario = dict(sorted(categorias_data.items()))
     
     parcelas_do_mes = _calcular_parcelas_do_mes(compras_parceladas, regras_cartoes)
     for p in parcelas_do_mes:
         p['is_deletable'] = False
 
-    transacoes_completas = sorted(transacoes_normais + parcelas_do_mes, key=lambda t: t['timestamp'], reverse=True)
+    transacoes_completas = sorted(transacoes_normais + parcelas_do_mes, key=lambda t: t.get('timestamp', ''), reverse=True)
 
     total_receitas = sum(t['valor'] for t in transacoes_completas if t.get('tipo') == 'receita')
     total_despesas = sum(t['valor'] for t in transacoes_completas if t.get('tipo') == 'despesa')
@@ -147,9 +153,7 @@ def calcular_dados_dashboard(user_id):
 
     progresso_metas = _calcular_progresso_metas(transacoes_completas, metas)
 
-    # --- INÍCIO DA NOVA LÓGICA DE LEMBRETES AUTOMÁTICOS ---
     lembretes_automaticos = []
-    # Fatura do mês atual (que fecha neste mês)
     mes_atual_fatura_str = hoje.strftime('%b/%y')
     
     for cartao, faturas in previsao_faturas.items():
@@ -162,12 +166,10 @@ def calcular_dados_dashboard(user_id):
                     "descricao": f"Fatura Cartão {cartao}",
                     "valor": valor_fatura_atual,
                     "dia_vencimento": dia_vencimento,
-                    "is_deletable": False # Para não mostrar o botão 'X'
+                    "is_deletable": False
                 })
     
-    # Combina os lembretes manuais e os automáticos, e ordena por dia do vencimento
     lembretes_combinados = sorted(lembretes_manuais + lembretes_automaticos, key=lambda x: x.get('dia_vencimento', 99))
-    # --- FIM DA NOVA LÓGICA ---
 
     return {
         'user_id': user_id, 'transacoes': transacoes_completas, 'total_receitas': total_receitas,
@@ -177,6 +179,6 @@ def calcular_dados_dashboard(user_id):
         'faturas': faturas_atuais, 'previsao_faturas': previsao_faturas, 'meses_previsao': meses_previsao_nomes,
         'progresso_metas': progresso_metas, 'categorias_disponiveis': categorias_usuario,
         'contas_disponiveis': contas_conhecidas, 'metas': metas, 
-        'lembretes': lembretes_combinados, # Passa a lista combinada para o template
+        'lembretes': lembretes_combinados,
         'regras_cartoes': regras_cartoes
     }
