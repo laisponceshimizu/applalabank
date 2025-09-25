@@ -279,27 +279,9 @@ def processar_transacao_normal(user_id, texto):
     if valor is None:
         return "Não consegui identificar um valor na sua mensagem. Tente novamente."
 
-    # --- NOVA VALIDAÇÃO ---
-    if tipo == 'despesa':
-        if metodo == 'outro':
-            return ("Faltou o método de pagamento. Tente de novo, especificando se foi `débito` ou `crédito`.\n\n"
-                    "Ex: `gastei 50 no mercado com o cartão Nubank`")
-        if metodo == 'crédito' and cartao is None:
-            cartoes = get_cartoes_conhecidos(user_id)
-            return (f"Você usou crédito, mas não disse qual cartão. Por favor, tente de novo.\n\n"
-                    f"Cartões disponíveis: {', '.join(cartoes)}\n"
-                    f"Ex: `gastei 50 no mercado com o cartão {cartoes[0] if cartoes else 'Nubank'}`")
-        if metodo == 'débito' and conta is None:
-            contas = get_contas_conhecidas(user_id).get('contas', [])
-            return (f"Você usou débito, mas não disse de qual conta. Por favor, tente de novo.\n\n"
-                    f"Contas disponíveis: {', '.join(contas)}\n"
-                    f"Ex: `paguei 50 no mercado com a conta {contas[0] if contas else 'Itaú'}`")
-
-    if tipo == 'receita' and conta is None:
-        contas = get_contas_conhecidas(user_id).get('contas', [])
-        return (f"Faltou dizer em qual conta a receita entrou. Por favor, tente de novo.\n\n"
-                f"Contas disponíveis: {', '.join(contas)}\n"
-                f"Ex: `recebi 1000 de salário na conta {contas[0] if contas else 'Itaú'}`")
+    # --- REMOÇÃO DAS VALIDAÇÕES ---
+    # A lógica que retornava erro se o método/conta/cartão estivesse faltando foi removida.
+    # Agora, a transação será salva com os valores que foram encontrados (ou None).
 
     categoria = categorizar_transacao(descricao_original, tipo, user_id)
 
@@ -308,6 +290,7 @@ def processar_transacao_normal(user_id, texto):
         "categoria": categoria, "metodo": metodo, "cartao": cartao,
         "conta": conta, "timestamp": datetime.now().isoformat()
     }
+    # A função salvar_transacao_db já está correta e irá salvar os dados
     salvar_transacao_db(user_id, transacao_data)
 
     if tipo == 'despesa':
@@ -316,65 +299,54 @@ def processar_transacao_normal(user_id, texto):
         return f"✅ Receita registada: '{descricao_original}' (R$ {valor:.2f})."
 
 def extrair_dados_transacao_normal(user_id, texto):
-    tipo, valor, metodo, cartao, conta = 'desconhecido', None, 'outro', None, None
+    # --- LÓGICA ATUALIZADA ---
+    tipo, valor, metodo, cartao, conta = 'despesa', None, None, None, None
     texto_lower = texto.lower()
 
     palavras_despesa = ['comprei', 'gastei', 'paguei']
     palavras_receita = ['recebi', 'ganhei', 'salário']
 
+    # A extração de tipo permanece a mesma
     if any(p in texto_lower for p in palavras_despesa): tipo = 'despesa'
-    elif any(p in texto_lower for p in palavras_receita): tipo = 'receita'
+    if any(p in texto_lower for p in palavras_receita): tipo = 'receita'
 
-    # --- LÓGICA DE EXTRAÇÃO DE VALOR MELHORADA ---
-    valor = None
-    # Regex para encontrar valores como 10, 10.50, 10,50, 2k, 2mil, 1.5k
+    # A extração de valor permanece a mesma
     match_valor = re.search(r'([\d,]+(?:[.,]\d+)?)(\s*(k|mil))?', texto_lower, re.IGNORECASE)
-
     if match_valor:
         try:
             numero_str = match_valor.group(1).replace(',', '.')
             numero = float(numero_str)
             sufixo = match_valor.group(3)
-
             if sufixo and sufixo.lower() in ['k', 'mil']:
                 numero *= 1000
-
             valor = numero
         except (ValueError, IndexError):
-            valor = None # Se a conversão falhar, continua nulo
+            valor = None
 
-    # Define o método primeiro, pois é mais explícito
+    # Lógica de extração de método, conta e cartão (não gera erro se não encontrar)
     if 'crédito' in texto_lower or 'cartao' in texto_lower or 'cartão' in texto_lower:
         metodo = 'crédito'
-    elif 'débito' in texto_lower or 'pix' in texto_lower:
-        metodo = 'débito'
-
-    # Se o método for crédito, procura por um cartão conhecido
-    if metodo == 'crédito':
         cartoes = get_cartoes_conhecidos(user_id)
         for c in cartoes:
             if c.lower() in texto_lower:
                 cartao = c
                 break
-    # Se for débito ou receita, procura por uma conta conhecida
-    elif metodo == 'débito' or tipo == 'receita':
-        metodo = 'débito' # Garante que receitas sejam marcadas como débito (entrada em conta)
+    elif 'débito' in texto_lower or 'pix' in texto_lower:
+        metodo = 'débito'
         contas = get_contas_conhecidas(user_id).get('contas', [])
         for c in contas:
             if c.lower() in texto_lower:
                 conta = c
                 break
 
-    # Caso especial para "pagamento de fatura", que é sempre débito
-    if categorizar_transacao(texto, 'despesa', user_id) == 'Pagamentos':
-        metodo = 'débito'
-        # Tenta identificar a conta do pagamento da fatura
-        if not conta:
-            contas = get_contas_conhecidas(user_id).get('contas', [])
-            for c in contas:
-                if c.lower() in texto_lower:
-                    conta = c
-                    break
+    # Se for uma receita, busca apenas a conta
+    if tipo == 'receita':
+        metodo = 'débito' # Entrada em conta
+        contas = get_contas_conhecidas(user_id).get('contas', [])
+        for c in contas:
+            if c.lower() in texto_lower:
+                conta = c
+                break
 
     return tipo, valor, texto, metodo, cartao, conta
 
