@@ -75,58 +75,44 @@ def processar_configuracao_contas(user_id, texto):
 def processar_mensagem(user_id, texto):
     """
     Função principal que decide o que fazer com a mensagem do utilizador,
-    agora com um fluxo de onboarding.
+    com fluxo de onboarding e ajuda para senha.
     """
     texto_lower = texto.lower()
 
-    # --- LÓGICA DE RESETAR USUÁRIO (CORRIGIDA) ---
+    # --- Lógica de Resetar Usuário ---
     if texto_lower == "resetar meus dados":
         return ("⚠️ ATENÇÃO! ⚠️", "Você tem certeza que deseja apagar TODOS os seus dados? Esta ação não pode ser desfeita.", "Para confirmar, envie: `sim apagar tudo`")
     
     if texto_lower == "sim apagar tudo":
-        # Apaga todas as configurações genéricas do usuário
         ConfiguracaoUsuario.query.filter_by(user_id=user_id).delete()
-        # Apaga todas as transações do usuário
         Transacao.query.filter_by(user_id=user_id).delete()
-        # Apaga todas as compras parceladas do usuário
         CompraParcelada.query.filter_by(user_id=user_id).delete()
-        # Confirma as alterações no banco de dados
         db.session.commit()
         return "✅ Seus dados foram apagados com sucesso."
-    # --- FIM DA CORREÇÃO ---
 
+    # --- Lógica de Estado do Usuário ---
     estado_usuario = get_user_data(user_id, "estado_usuario", None)
     
     if estado_usuario == 'aguardando_contas':
         return processar_configuracao_contas(user_id, texto)
 
+    # --- Lógica de Novo Usuário ---
     senha_definida = get_user_data(user_id, "senha", None)
     if not senha_definida:
         if texto_lower.startswith("senha "):
             resposta_senha = processar_comando_senha(user_id, texto)
             set_user_data(user_id, 'estado_usuario', 'aguardando_contas')
-            return (
-                "Olá! Bem-vindo(a) ao Lalabank! 👋",
-                resposta_senha,
-                "\nAntes de começar, vamos configurar suas contas para facilitar os registros.",
-                "Por favor, envie os nomes dos bancos e cartões que você usa, separados por vírgula (ex: Bradesco, Nubank, C6 Bank).",
-                "Se preferir, digite `pular` para começar com as contas padrão e configure depois no dashboard."
-            )
+            return ("Olá! Bem-vindo(a) ao Lalabank! 👋", resposta_senha, "\nAntes de começar, vamos configurar suas contas para facilitar os registros.", "Por favor, envie os nomes dos bancos e cartões que você usa, separados por vírgula (ex: Bradesco, Nubank, C6 Bank).", "Se preferir, digite `pular` para começar com as contas padrão e configure depois no dashboard.")
         else:
             return ("Olá! Bem-vindo(a) ao Lalabank, seu assistente financeiro pessoal! 👋", "Para começar e garantir a segurança dos seus dados, o primeiro passo é criar uma senha.", "Por favor, envie uma mensagem no seguinte formato:\n`senha sua_senha_aqui`")
 
+    # --- Lógica de Comandos para Usuários Existentes ---
     if texto_lower == "ajuda":
         link_dashboard = f"{DASHBOARD_URL}/login/{user_id}" if DASHBOARD_URL else "O link do dashboard não está configurado."
         mensagem_ajuda = ("Aqui estão os comandos que você pode usar:\n\n"
-                          "*Finanças:*\n"
-                          "- Para registrar um gasto: `gastei 50 no mercado com o cartão Nubank`\n"
-                          "- Para registrar uma receita: `recebi 1000 de salário no Itaú`\n\n"
-                          "*Recursos:*\n"
-                          "- Para compras parceladas, digite `parcelado`.\n"
-                          "- Para lembretes de contas, digite `lembrete`.\n"
-                          "- Para definir uma meta de gastos: `meta Alimentação 800`\n\n"
-                          "*Conta:*\n"
-                          "- Para alterar sua senha: `senha [nova_senha]`\n"
+                          "*Finanças:*\n- Para registrar um gasto: `gastei 50 no mercado com o cartão Nubank`\n- Para registrar uma receita: `recebi 1000 de salário no Itaú`\n\n"
+                          "*Recursos:*\n- Para compras parceladas, digite `parcelado`.\n- Para lembretes de contas, digite `lembrete`.\n- Para definir uma meta de gastos: `meta Alimentação 800`\n\n"
+                          "*Conta:*\n- Para alterar sua senha: `senha [nova_senha]`\n"
                           f"- Para acessar seu dashboard: {link_dashboard}")
         return mensagem_ajuda
 
@@ -136,6 +122,12 @@ def processar_mensagem(user_id, texto):
         link_dashboard = f"{DASHBOARD_URL}/login/{user_id}"
         return ("Aqui está o seu link de acesso pessoal ao dashboard:", link_dashboard)
 
+    # --- INÍCIO DA NOVA LÓGICA DE "ESQUECI A SENHA" ---
+    palavras_chave_senha = ["esqueci a senha", "perdi a senha", "mudar a senha", "alterar senha", "redefinir senha"]
+    if any(palavra in texto_lower for palavra in palavras_chave_senha):
+        return "Para criar ou redefinir sua senha, basta enviar uma nova no formato:\n`senha sua_nova_senha_aqui`"
+    # --- FIM DA NOVA LÓGICA ---
+    
     if texto_lower.startswith("senha "):
         return processar_comando_senha(user_id, texto)
 
