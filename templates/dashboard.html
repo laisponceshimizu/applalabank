@@ -261,14 +261,20 @@
         }
 
         document.addEventListener("DOMContentLoaded", function() {
-            const hash = window.location.hash.substring(1);
-            let startTab = document.getElementById(hash) ? hash : 'Dashboard';
-            const tabButton = Array.from(document.querySelectorAll('.tab-link')).find(btn => btn.textContent === startTab);
+            const hash = window.location.hash.substring(1); // Remove o '#'
+            const tabNameToOpen = document.getElementById(hash) ? hash : 'Dashboard';
+
+            // Encontra o botão que tem o onclick com o nome da aba
+            const tabButton = Array.from(document.querySelectorAll('.tab-link')).find(
+                btn => btn.getAttribute('onclick').includes(`'${tabNameToOpen}'`)
+            );
+            
             if(tabButton) {
                 tabButton.click();
             } else {
-                document.querySelector('.tab-link').click();
+                document.querySelector('.tab-link').click(); // Fallback
             }
+
             const transacoes = {{ transacoes|tojson|safe }};
             transacoes.forEach(t => {
                 if(t.is_deletable) {
