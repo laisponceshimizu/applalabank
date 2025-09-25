@@ -4,8 +4,7 @@ from dateutil.relativedelta import relativedelta
 import os
 import requests
 
-# --- INÍCIO DAS ALTERAÇÕES ---
-# Remove a importação do replit.db e importa os componentes do novo banco de dados
+# Importa os componentes do novo banco de dados
 from main import db
 from models import Transacao, CompraParcelada, ConfiguracaoUsuario
 from database import (
@@ -13,9 +12,8 @@ from database import (
     salvar_transacao_db, salvar_compra_parcelada_db,
     get_categorias, get_contas_conhecidas, get_cartoes_conhecidos,
     salvar_lembrete_db, get_lembretes_db, adicionar_conta_db,
-    salvar_senha_db, definir_contas_iniciais_db # Importa a nova função
+    salvar_senha_db, definir_contas_iniciais_db
 )
-# --- FIM DAS ALTERAÇÕES ---
 
 VERIFY_TOKEN = "teste"
 ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
@@ -51,15 +49,10 @@ def processar_comando_senha(user_id, texto):
     salvar_senha_db(user_id, nova_senha)
     return "✅ Senha definida com sucesso! Use esta senha para acessar seu dashboard na web."
 
-# --- INÍCIO DA NOVA LÓGICA DE ONBOARDING ---
 def processar_configuracao_contas(user_id, texto):
-    """Processa a resposta do usuário durante a configuração inicial de contas."""
     if texto == 'pular':
-        set_user_data(user_id, 'estado_usuario', None) # Limpa o estado
-        return (
-            "Sem problemas! Você pode configurar suas contas, categorias e metas a qualquer momento na aba 'Configurações' do seu dashboard.",
-            "Digite `ajuda` para ver os comandos ou simplesmente comece a registrar suas transações."
-        )
+        set_user_data(user_id, 'estado_usuario', None)
+        return ("Sem problemas! Você pode configurar suas contas, categorias e metas a qualquer momento na aba 'Configurações' do seu dashboard.", "Digite `ajuda` para ver os comandos ou simplesmente comece a registrar suas transações.")
     
     nomes_contas = [nome.strip().capitalize() for nome in texto.split(',') if nome.strip()]
     
@@ -67,38 +60,33 @@ def processar_configuracao_contas(user_id, texto):
         return "Não consegui identificar nenhum nome de conta. Por favor, tente novamente (ex: Bradesco, Nubank)."
 
     definir_contas_iniciais_db(user_id, nomes_contas)
-    set_user_data(user_id, 'estado_usuario', None) # Limpa o estado
+    set_user_data(user_id, 'estado_usuario', None)
 
-    return (
-        "✅ Ótimo! Suas contas foram salvas.",
-        "Agora você está pronto para começar! Digite `ajuda` para ver todos os comandos."
-    )
+    return ("✅ Ótimo! Suas contas foram salvas.", "Agora você está pronto para começar! Digite `ajuda` para ver todos os comandos.")
 
 def processar_mensagem(user_id, texto):
-    """
-    Função principal que decide o que fazer com a mensagem do utilizador,
-    agora com um fluxo de onboarding.
-    """
     texto_lower = texto.lower()
 
+    # --- LÓGICA DE RESETAR USUÁRIO (CORRIGIDA) ---
     if texto_lower == "resetar meus dados":
         return ("⚠️ ATENÇÃO! ⚠️", "Você tem certeza que deseja apagar TODOS os seus dados? Esta ação não pode ser desfeita.", "Para confirmar, envie: `sim apagar tudo`")
     
     if texto_lower == "sim apagar tudo":
-        chaves_para_apagar = ["categorias", "contas", "regras_cartoes_v2", "metas", "lembretes", "senha", "estado_usuario"]
-        for chave in chaves_para_apagar:
-            config = ConfiguracaoUsuario.query.filter_by(user_id=user_id, chave=chave).first()
-            if config:
-                db.session.delete(config)
+        # Apaga todas as configurações genéricas do usuário
+        ConfiguracaoUsuario.query.filter_by(user_id=user_id).delete()
+        # Apaga todas as transações do usuário
         Transacao.query.filter_by(user_id=user_id).delete()
+        # Apaga todas as compras parceladas do usuário
         CompraParcelada.query.filter_by(user_id=user_id).delete()
+        # Confirma as alterações no banco de dados
         db.session.commit()
         return "✅ Seus dados foram apagados com sucesso."
+    # --- FIM DA CORREÇÃO ---
 
     estado_usuario = get_user_data(user_id, "estado_usuario", None)
     
     if estado_usuario == 'aguardando_contas':
-        return processar_configuracao_contas(user_id, texto)
+        return processar_configuracao_contas(user_id, texto_lower)
 
     senha_definida = get_user_data(user_id, "senha", None)
     if not senha_definida:
@@ -115,7 +103,6 @@ def processar_mensagem(user_id, texto):
         else:
             return ("Olá! Bem-vindo(a) ao Lalabank, seu assistente financeiro pessoal! 👋", "Para começar e garantir a segurança dos seus dados, o primeiro passo é criar uma senha.", "Por favor, envie uma mensagem no seguinte formato:\n`senha sua_senha_aqui`")
 
-    # (O resto do arquivo a partir daqui permanece o mesmo, mas vou incluir para garantir)
     if texto_lower == "ajuda":
         link_dashboard = f"{DASHBOARD_URL}/login/{user_id}" if DASHBOARD_URL else "O link do dashboard não está configurado."
         mensagem_ajuda = ("Aqui estão os comandos que você pode usar:\n\n"
@@ -157,5 +144,5 @@ def processar_mensagem(user_id, texto):
     
     return processar_transacao_normal(user_id, texto)
 
-# (O resto do seu arquivo utils.py pode continuar a partir daqui sem alterações)
-# ... (as funções como processar_comando_lembrete, processar_transacao_normal, etc. permanecem aqui) ...
+# O restante das funções em utils.py (processar_comando_lembrete, gerar_modelo_parcelado, etc.)
+# podem permanecer as mesmas.
