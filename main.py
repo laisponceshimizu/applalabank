@@ -30,7 +30,7 @@ from database import (
 )
 from dashboard_calculations import calcular_dados_dashboard
 
-# Importa os modelos do banco de dados (que criaremos a seguir)
+# Importa os modelos do banco de dados
 from models import *
 
 @app.route("/webhook", methods=['GET', 'POST'])
@@ -163,6 +163,35 @@ def delete_transaction():
     data = request.get_json()
     apagar_transacao_db(data['user_id'], data['timestamp'])
     return make_response("Transação apagada", 200)
+
+# --- ROTA ADICIONADA PARA ATUALIZAR TRANSAÇÕES ---
+@app.route("/update_transaction", methods=['POST'])
+def update_transaction():
+    data = request.get_json()
+    # Acessa a transação pelo ID
+    transacao = Transacao.query.get(data['id'])
+    
+    # Verifica se a transação existe e pertence ao usuário logado
+    if not transacao or transacao.user_id != data['user_id']:
+        return make_response("Transação não encontrada", 404)
+
+    # Atualiza os campos com os novos valores do dashboard
+    transacao.categoria = data.get('categoria')
+    transacao.metodo = data.get('metodo')
+    
+    # Zera os campos de conta/cartão para evitar dados inconsistentes
+    transacao.conta = None
+    transacao.cartao = None
+    
+    # Define o campo correto baseado no método selecionado
+    if transacao.metodo == 'débito':
+        transacao.conta = data.get('conta_cartao')
+    elif transacao.metodo == 'crédito':
+        transacao.cartao = data.get('conta_cartao')
+
+    # Salva as alterações no banco de dados
+    db.session.commit()
+    return make_response("Transação atualizada", 200)
 
 if __name__ == "__main__":
     # Esta parte é para rodar localmente, o Render usará o gunicorn
