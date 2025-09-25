@@ -1,5 +1,3 @@
-# models.py
-
 from main import db
 from datetime import datetime
 import json
@@ -12,11 +10,13 @@ class Transacao(db.Model):
     descricao = db.Column(db.String(300))
     valor = db.Column(db.Float)
     categoria = db.Column(db.String(100))
-    metodo = db.Column(db.String(50))
+    # Alteração: Adicionado nullable=True
+    metodo = db.Column(db.String(50), nullable=True)
     cartao = db.Column(db.String(100), nullable=True)
     conta = db.Column(db.String(100), nullable=True)
     timestamp = db.Column(db.String(100), default=lambda: datetime.now().isoformat())
 
+# (O resto do arquivo permanece igual)
 # Modelo para Compras Parceladas
 class CompraParcelada(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -28,7 +28,6 @@ class CompraParcelada(db.Model):
     categoria = db.Column(db.String(100))
     data_inicio = db.Column(db.String(100), default=lambda: datetime.now().isoformat())
 
-# --- CLASSE QUE ESTAVA FALTANDO ---
 # Modelo Genérico para guardar configurações, senhas, metas, etc.
 class ConfiguracaoUsuario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
