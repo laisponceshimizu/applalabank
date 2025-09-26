@@ -13,7 +13,8 @@ from database import (
     get_categorias, get_contas_conhecidas, get_cartoes_conhecidos,
     salvar_lembrete_db, get_lembretes_db, adicionar_conta_db,
     salvar_senha_db, get_transacoes_db, get_compras_parceladas_db,
-    definir_contas_iniciais_db # Importa a nova função de onboarding
+    definir_contas_iniciais_db,
+    apagar_ultima_transacao_db # <-- FUNÇÃO ADICIONADA
 )
 
 VERIFY_TOKEN = "teste"
