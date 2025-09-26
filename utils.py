@@ -89,13 +89,7 @@ def processar_mensagem(user_id, texto):
         if texto_lower.startswith("senha "):
             resposta_senha = processar_comando_senha(user_id, texto)
             set_user_data(user_id, 'estado_usuario', 'aguardando_contas')
-            return (
-                "Olá! Bem-vindo(a) ao Lalabank! 👋",
-                resposta_senha,
-                "\nAntes de começar, vamos configurar suas contas para facilitar os registros.",
-                "Por favor, envie os nomes dos bancos e cartões que você usa, separados por vírgula (ex: Bradesco, Nubank, C6 Bank).",
-                "Se preferir, digite `pular` para começar com as contas padrão e configure depois no dashboard."
-            )
+            return ("Olá! Bem-vindo(a) ao Lalabank! 👋", resposta_senha, "\nAntes de começar, vamos configurar suas contas para facilitar os registros.", "Por favor, envie os nomes dos bancos e cartões que você usa, separados por vírgula (ex: Bradesco, Nubank, C6 Bank).", "Se preferir, digite `pular` para começar com as contas padrão e configure depois no dashboard.")
         else:
             return ("Olá! Bem-vindo(a) ao Lalabank, seu assistente financeiro pessoal! 👋", "Para começar e garantir a segurança dos seus dados, o primeiro passo é criar uma senha.", "Por favor, envie uma mensagem no seguinte formato:\n`senha sua_senha_aqui`")
 
