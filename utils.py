@@ -72,10 +72,11 @@ def processar_configuracao_contas(user_id, texto):
         "Agora você está pronto para começar! Digite `ajuda` para ver todos os comandos."
     )
 
+# Em utils.py, substitua a função processar_mensagem por esta
+
 def processar_mensagem(user_id, texto):
     """
-    Função principal que decide o que fazer com a mensagem do utilizador,
-    com fluxo de onboarding e ajuda para senha.
+    Função principal que decide o que fazer com a mensagem do utilizador.
     """
     texto_lower = texto.lower()
 
@@ -106,14 +107,36 @@ def processar_mensagem(user_id, texto):
         else:
             return ("Olá! Bem-vindo(a) ao Lalabank, seu assistente financeiro pessoal! 👋", "Para começar e garantir a segurança dos seus dados, o primeiro passo é criar uma senha.", "Por favor, envie uma mensagem no seguinte formato:\n`senha sua_senha_aqui`")
 
-    # --- Lógica de Comandos para Usuários Existentes ---
+    # --- Lógica para apagar a última transação ---
+    palavras_chave_apagar = ["apagar ultima", "apagar última", "cancelar ultima", "cancelar última", "excluir ultima", "excluir última"]
+    if any(palavra in texto_lower for palavra in palavras_chave_apagar):
+        transacao_apagada = apagar_ultima_transacao_db(user_id)
+        if transacao_apagada:
+            descricao = transacao_apagada['descricao']
+            valor = transacao_apagada['valor']
+            return f"✅ A sua última transação ('{descricao}' de R$ {valor:.2f}) foi apagada com sucesso."
+        else:
+            return "Você não tem nenhuma transação recente para apagar."
+    
+    # --- Lógica de Comandos ---
     if texto_lower == "ajuda":
         link_dashboard = f"{DASHBOARD_URL}/login/{user_id}" if DASHBOARD_URL else "O link do dashboard não está configurado."
-        mensagem_ajuda = ("Aqui estão os comandos que você pode usar:\n\n"
-                          "*Finanças:*\n- Para registrar um gasto: `gastei 50 no mercado com o cartão Nubank`\n- Para registrar uma receita: `recebi 1000 de salário no Itaú`\n\n"
-                          "*Recursos:*\n- Para compras parceladas, digite `parcelado`.\n- Para lembretes de contas, digite `lembrete`.\n- Para definir uma meta de gastos: `meta Alimentação 800`\n\n"
-                          "*Conta:*\n- Para alterar sua senha: `senha [nova_senha]`\n"
-                          f"- Para acessar seu dashboard: {link_dashboard}")
+        # --- INÍCIO DA ALTERAÇÃO ---
+        mensagem_ajuda = (
+            "Aqui estão os comandos que você pode usar:\n\n"
+            "*Finanças:*\n"
+            "- Para registrar um gasto: `gastei 50 no mercado com o cartão Nubank`\n"
+            "- Para registrar uma receita: `recebi 1000 de salário no Itaú`\n"
+            "- Para apagar o último lançamento: `apagar última transação`\n\n" # <-- LINHA ADICIONADA
+            "*Recursos:*\n"
+            "- Para compras parceladas, digite `parcelado`.\n"
+            "- Para lembretes de contas, digite `lembrete`.\n"
+            "- Para definir uma meta de gastos: `meta Alimentação 800`\n\n"
+            "*Conta:*\n"
+            "- Para alterar sua senha: `senha [nova_senha]`\n"
+            f"- Para acessar seu dashboard: {link_dashboard}"
+        )
+        # --- FIM DA ALTERAÇÃO ---
         return mensagem_ajuda
 
     if texto_lower in ["dashboard", "link"]:
@@ -122,11 +145,9 @@ def processar_mensagem(user_id, texto):
         link_dashboard = f"{DASHBOARD_URL}/login/{user_id}"
         return ("Aqui está o seu link de acesso pessoal ao dashboard:", link_dashboard)
 
-    # --- INÍCIO DA NOVA LÓGICA DE "ESQUECI A SENHA" ---
     palavras_chave_senha = ["esqueci a senha", "perdi a senha", "mudar a senha", "alterar senha", "redefinir senha"]
     if any(palavra in texto_lower for palavra in palavras_chave_senha):
         return "Para criar ou redefinir sua senha, basta enviar uma nova no formato:\n`senha sua_nova_senha_aqui`"
-    # --- FIM DA NOVA LÓGICA ---
     
     if texto_lower.startswith("senha "):
         return processar_comando_senha(user_id, texto)
