@@ -41,14 +41,11 @@ def apagar_transacao_db(user_id, timestamp):
         db.session.delete(transacao)
         db.session.commit()
 
-# --- INÍCIO DA FUNÇÃO QUE FALTAVA ---
+# --- INÍCIO DA CORREÇÃO ---
 def apagar_ultima_transacao_db(user_id):
-    """Encontra e apaga a última transação de um usuário que não seja de parcela."""
-    # Busca a transação mais recente do usuário que foi registrada manualmente (não é parcela gerada)
-    ultima_transacao = Transacao.query.filter(
-        Transacao.user_id == user_id,
-        Transacao.metodo != None
-    ).order_by(Transacao.timestamp.desc()).first()
+    """Encontra e apaga a última transação de um usuário."""
+    # Busca a transação mais recente do usuário, sem filtrar pelo método
+    ultima_transacao = Transacao.query.filter_by(user_id=user_id).order_by(Transacao.timestamp.desc()).first()
     
     if ultima_transacao:
         descricao = ultima_transacao.descricao
@@ -57,9 +54,8 @@ def apagar_ultima_transacao_db(user_id):
         db.session.commit()
         return {"descricao": descricao, "valor": valor}
     
-    return None # Retorna None se não houver transações para apagar
-# --- FIM DA FUNÇÃO QUE FALTAVA ---
-
+    return None
+# --- FIM DA CORREÇÃO ---
 
 # --- Compras Parceladas ---
 def get_compras_parceladas_db(user_id):
