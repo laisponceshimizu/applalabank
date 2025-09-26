@@ -14,7 +14,7 @@ from database import (
     salvar_lembrete_db, get_lembretes_db, adicionar_conta_db,
     salvar_senha_db, get_transacoes_db, get_compras_parceladas_db,
     definir_contas_iniciais_db,
-    apagar_ultima_transacao_db # <-- FUNÇÃO ADICIONADA
+    apagar_ultima_transacao_db # <-- CORREÇÃO: Importa a função que faltava
 )
 
 VERIFY_TOKEN = "teste"
@@ -52,13 +52,9 @@ def processar_comando_senha(user_id, texto):
     return "✅ Senha definida com sucesso! Use esta senha para acessar seu dashboard na web."
 
 def processar_configuracao_contas(user_id, texto):
-    """Processa a resposta do usuário durante a configuração inicial de contas."""
     if texto == 'pular':
-        set_user_data(user_id, 'estado_usuario', None) # Limpa o estado
-        return (
-            "Sem problemas! Você pode configurar suas contas, categorias e metas a qualquer momento na aba 'Configurações' do seu dashboard.",
-            "Digite `ajuda` para ver os comandos ou simplesmente comece a registrar suas transações."
-        )
+        set_user_data(user_id, 'estado_usuario', None)
+        return ("Sem problemas! Você pode configurar suas contas, categorias e metas a qualquer momento na aba 'Configurações' do seu dashboard.", "Digite `ajuda` para ver os comandos ou simplesmente comece a registrar suas transações.")
     
     nomes_contas = [nome.strip().capitalize() for nome in texto.split(',') if nome.strip()]
     
@@ -66,22 +62,13 @@ def processar_configuracao_contas(user_id, texto):
         return "Não consegui identificar nenhum nome de conta. Por favor, tente novamente (ex: Bradesco, Nubank)."
 
     definir_contas_iniciais_db(user_id, nomes_contas)
-    set_user_data(user_id, 'estado_usuario', None) # Limpa o estado
+    set_user_data(user_id, 'estado_usuario', None)
 
-    return (
-        "✅ Ótimo! Suas contas foram salvas.",
-        "Agora você está pronto para começar! Digite `ajuda` para ver todos os comandos."
-    )
-
-# Em utils.py, substitua a função processar_mensagem por esta
+    return ("✅ Ótimo! Suas contas foram salvas.", "Agora você está pronto para começar! Digite `ajuda` para ver todos os comandos.")
 
 def processar_mensagem(user_id, texto):
-    """
-    Função principal que decide o que fazer com a mensagem do utilizador.
-    """
     texto_lower = texto.lower()
 
-    # --- Lógica de Resetar Usuário ---
     if texto_lower == "resetar meus dados":
         return ("⚠️ ATENÇÃO! ⚠️", "Você tem certeza que deseja apagar TODOS os seus dados? Esta ação não pode ser desfeita.", "Para confirmar, envie: `sim apagar tudo`")
     
@@ -92,23 +79,26 @@ def processar_mensagem(user_id, texto):
         db.session.commit()
         return "✅ Seus dados foram apagados com sucesso."
 
-    # --- Lógica de Estado do Usuário ---
     estado_usuario = get_user_data(user_id, "estado_usuario", None)
     
     if estado_usuario == 'aguardando_contas':
-        return processar_configuracao_contas(user_id, texto)
+        return processar_configuracao_contas(user_id, texto_lower)
 
-    # --- Lógica de Novo Usuário ---
     senha_definida = get_user_data(user_id, "senha", None)
     if not senha_definida:
         if texto_lower.startswith("senha "):
             resposta_senha = processar_comando_senha(user_id, texto)
             set_user_data(user_id, 'estado_usuario', 'aguardando_contas')
-            return ("Olá! Bem-vindo(a) ao Lalabank! 👋", resposta_senha, "\nAntes de começar, vamos configurar suas contas para facilitar os registros.", "Por favor, envie os nomes dos bancos e cartões que você usa, separados por vírgula (ex: Bradesco, Nubank, C6 Bank).", "Se preferir, digite `pular` para começar com as contas padrão e configure depois no dashboard.")
+            return (
+                "Olá! Bem-vindo(a) ao Lalabank! 👋",
+                resposta_senha,
+                "\nAntes de começar, vamos configurar suas contas para facilitar os registros.",
+                "Por favor, envie os nomes dos bancos e cartões que você usa, separados por vírgula (ex: Bradesco, Nubank, C6 Bank).",
+                "Se preferir, digite `pular` para começar com as contas padrão e configure depois no dashboard."
+            )
         else:
             return ("Olá! Bem-vindo(a) ao Lalabank, seu assistente financeiro pessoal! 👋", "Para começar e garantir a segurança dos seus dados, o primeiro passo é criar uma senha.", "Por favor, envie uma mensagem no seguinte formato:\n`senha sua_senha_aqui`")
 
-    # --- Lógica para apagar a última transação ---
     palavras_chave_apagar = ["apagar ultima", "apagar última", "cancelar ultima", "cancelar última", "excluir ultima", "excluir última"]
     if any(palavra in texto_lower for palavra in palavras_chave_apagar):
         transacao_apagada = apagar_ultima_transacao_db(user_id)
@@ -118,17 +108,15 @@ def processar_mensagem(user_id, texto):
             return f"✅ A sua última transação ('{descricao}' de R$ {valor:.2f}) foi apagada com sucesso."
         else:
             return "Você não tem nenhuma transação recente para apagar."
-    
-    # --- Lógica de Comandos ---
+
     if texto_lower == "ajuda":
         link_dashboard = f"{DASHBOARD_URL}/login/{user_id}" if DASHBOARD_URL else "O link do dashboard não está configurado."
-        # --- INÍCIO DA ALTERAÇÃO ---
         mensagem_ajuda = (
             "Aqui estão os comandos que você pode usar:\n\n"
             "*Finanças:*\n"
             "- Para registrar um gasto: `gastei 50 no mercado com o cartão Nubank`\n"
             "- Para registrar uma receita: `recebi 1000 de salário no Itaú`\n"
-            "- Para apagar o último lançamento: `apagar última transação`\n\n" # <-- LINHA ADICIONADA
+            "- Para apagar o último lançamento: `apagar última transação`\n\n"
             "*Recursos:*\n"
             "- Para compras parceladas, digite `parcelado`.\n"
             "- Para lembretes de contas, digite `lembrete`.\n"
@@ -137,7 +125,6 @@ def processar_mensagem(user_id, texto):
             "- Para alterar sua senha: `senha [nova_senha]`\n"
             f"- Para acessar seu dashboard: {link_dashboard}"
         )
-        # --- FIM DA ALTERAÇÃO ---
         return mensagem_ajuda
 
     if texto_lower in ["dashboard", "link"]:
@@ -177,14 +164,11 @@ def processar_comando_lembrete(user_id, texto):
             if ':' in linha:
                 chave, valor = linha.split(':', 1)
                 dados[chave.strip().lower()] = valor.strip()
-
         descricao = dados['lembrete']
         valor = float(dados['valor'].replace(',', '.'))
         dia_vencimento = int(dados['vence dia'])
-
         if not (1 <= dia_vencimento <= 31):
             return "❌ O dia do vencimento deve ser um número entre 1 e 31."
-
         lembrete_data = {
             "descricao": descricao, "valor": valor, 
             "dia_vencimento": dia_vencimento, "timestamp": datetime.now().isoformat()
@@ -199,87 +183,64 @@ def processar_comando_meta(user_id, texto):
         partes = texto.split()
         if len(partes) < 3:
             return "❌ Formato inválido. Use: meta [categoria] [valor]"
-
         nome_categoria = partes[1].capitalize()
         valor_meta = float(partes[2].replace(',', '.'))
-
         categorias_usuario = get_categorias(user_id)
         if nome_categoria not in categorias_usuario:
             return (f"❌ Categoria '{nome_categoria}' não encontrada.\n\n"
                     f"Categorias disponíveis são: {', '.join(categorias_usuario.keys())}")
-
         from database import salvar_meta_db
         salvar_meta_db(user_id, nome_categoria, valor_meta)
         return f"✅ Meta de R$ {valor_meta:.2f} definida para a categoria '{nome_categoria}'."
-
     except (ValueError, IndexError):
         return "❌ Formato inválido. Use: meta [categoria] [valor]"
 
 def gerar_modelo_parcelado(user_id):
     cartoes = get_cartoes_conhecidos(user_id)
-    instrucao = (
-        "Para registar uma compra parcelada, por favor, copie o modelo abaixo, preencha os dados e envie:"
-    )
-    modelo = (
-        "parcelado: [descrição da compra]\n"
-        "valor: [valor total]\n"
-        "parcelas: [Nº de parcelas]\n"
-        f"cartão: [um de: {', '.join(cartoes)}]"
-    )
+    instrucao = ("Para registar uma compra parcelada, por favor, copie o modelo abaixo, preencha os dados e envie:")
+    modelo = ( "parcelado: [descrição da compra]\n" "valor: [valor total]\n" "parcelas: [Nº de parcelas]\n" f"cartão: [um de: {', '.join(cartoes)}]")
     return instrucao, modelo
 
 def processar_compra_parcelada(user_id, texto):
     try:
         dados = {}
         linhas = texto.split('\n')
-
         descricao = linhas[0].split(':', 1)[1].strip()
-
         for linha in linhas[1:]:
             if ':' in linha:
                 chave, valor = linha.split(':', 1)
                 dados[chave.strip().lower()] = valor.strip()
-
         valor_total = float(dados['valor'].replace(',', '.'))
         num_parcelas = int(dados['parcelas'])
         cartao = dados['cartão'].capitalize()
-
         cartoes_conhecidos = get_cartoes_conhecidos(user_id)
         if cartao not in cartoes_conhecidos:
             return f"❌ Cartão '{cartao}' não reconhecido. Cartões disponíveis: {', '.join(cartoes_conhecidos)}."
-
         valor_parcela = valor_total / num_parcelas
         categoria = categorizar_transacao(descricao, 'despesa', user_id)
-
         compra_data = {
             "descricao": descricao, "valor_total": valor_total,
             "num_parcelas": num_parcelas, "cartao": cartao,
             "categoria": categoria, "data_inicio": datetime.now().isoformat()
         }
         salvar_compra_parcelada_db(user_id, compra_data)
-
         return (f"✅ Compra parcelada registada: '{descricao}'\n"
                 f"Valor: R$ {valor_total:.2f} em {num_parcelas}x de R$ {valor_parcela:.2f}\n"
                 f"Cartão: {cartao}")
-
     except (ValueError, KeyError, IndexError):
         return "❌ Formato da compra parcelada inválido. Por favor, use o modelo exato que eu enviei."
 
 def processar_transacao_normal(user_id, texto):
     tipo, valor, descricao_original, metodo, cartao, conta = extrair_dados_transacao_normal(user_id, texto)
-
     if valor is None:
         return "Não consegui identificar um valor na sua mensagem. Tente novamente."
-
     categoria = categorizar_transacao(descricao_original, tipo, user_id)
-
     transacao_data = {
         "tipo": tipo, "descricao": descricao_original, "valor": valor,
         "categoria": categoria, "metodo": metodo, "cartao": cartao,
         "conta": conta, "timestamp": datetime.now().isoformat()
     }
     salvar_transacao_db(user_id, transacao_data)
-
     if tipo == 'despesa':
         return f"✅ Despesa registada: '{descricao_original}' (R$ {valor:.2f})."
     elif tipo == 'receita':
@@ -288,13 +249,10 @@ def processar_transacao_normal(user_id, texto):
 def extrair_dados_transacao_normal(user_id, texto):
     tipo, valor, metodo, cartao, conta = 'despesa', None, None, None, None
     texto_lower = texto.lower()
-
     palavras_despesa = ['comprei', 'gastei', 'paguei']
     palavras_receita = ['recebi', 'ganhei', 'salário']
-
     if any(p in texto_lower for p in palavras_despesa): tipo = 'despesa'
     if any(p in texto_lower for p in palavras_receita): tipo = 'receita'
-
     match_valor = re.search(r'([\d,]+(?:[.,]\d+)?)(\s*(k|mil))?', texto_lower, re.IGNORECASE)
     if match_valor:
         try:
@@ -306,7 +264,6 @@ def extrair_dados_transacao_normal(user_id, texto):
             valor = numero
         except (ValueError, IndexError):
             valor = None
-
     if 'crédito' in texto_lower or 'cartao' in texto_lower or 'cartão' in texto_lower:
         metodo = 'crédito'
         cartoes = get_cartoes_conhecidos(user_id)
@@ -321,32 +278,27 @@ def extrair_dados_transacao_normal(user_id, texto):
             if c.lower() in texto_lower:
                 conta = c
                 break
-
     if tipo == 'receita':
-        metodo = 'débito' # Entrada em conta
+        metodo = 'débito'
         contas = get_contas_conhecidas(user_id).get('contas', [])
         for c in contas:
             if c.lower() in texto_lower:
                 conta = c
                 break
-
     return tipo, valor, texto, metodo, cartao, conta
 
 def categorizar_transacao(descricao, tipo, user_id):
     categorias = get_categorias(user_id)
     descricao_lower = descricao.lower()
-
     categorias_receita = {
         'Salário': ['salário'],
         'Outras Receitas': ['recebi', 'ganhei', 'investimentos']
     }
-
     if tipo == 'receita':
         for categoria, palavras in categorias_receita.items():
             if any(palavra in descricao_lower for palavra in palavras):
                 return categoria
         return 'Outras Receitas'
-
     elif tipo == 'despesa':
         for categoria, palavras in categorias.items():
             if categoria not in ['Salário', 'Outras Receitas']:
@@ -355,11 +307,4 @@ def categorizar_transacao(descricao, tipo, user_id):
     return 'Outros'
 
 def verificar_e_enviar_lembretes():
-    """
-    Verifica todos os lembretes de todos os utilizadores e envia notificações
-    para aqueles que estão próximos do vencimento.
-    """
-    # Esta função precisaria ser adaptada para iterar sobre todos os usuários no novo banco de dados,
-    # em vez de escanear chaves do replit.db.
-    # Por enquanto, esta função não funcionará no Render sem uma nova lógica para obter todos os user_ids.
     print("Verificação de lembretes iniciada (lógica a ser adaptada para SQLAlchemy).")
