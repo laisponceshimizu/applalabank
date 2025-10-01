@@ -55,8 +55,14 @@ def processar_comando_senha(user_id, texto):
 
     nova_senha = partes[1]
     salvar_senha_db(user_id, nova_senha)
-    return "✅ Senha definida com sucesso! Use esta senha para acessar seu dashboard na web."
-           "🔒 Para sua segurança, recomendamos que você apague a sua mensagem anterior que contém a senha."
+    
+    # --- ALTERAÇÃO APLICADA AQUI ---
+    # Mensagem de sucesso com a instrução de segurança adicional
+    mensagem_sucesso = (
+        "✅ Senha definida com sucesso! Use esta senha para acessar seu dashboard na web.\n\n"
+        "🔒 Para sua segurança, recomendamos que você apague a sua mensagem anterior que contém a senha."
+    )
+    return mensagem_sucesso
 
 def processar_configuracao_contas(user_id, texto):
     """Processa a resposta do usuário durante a configuração inicial de contas."""
