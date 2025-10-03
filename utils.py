@@ -209,7 +209,7 @@ def processar_comando_lembrete(user_id, texto):
             "dia_vencimento": dia_vencimento, "timestamp": datetime.now().isoformat()
         }
         salvar_lembrete_db(user_id, lembrete_data)
-        return f"✅ Lembrete registado: '{descricao}' no valor de R$ {valor:.2f}, com vencimento todo dia {dia_vencimento}."
+        return f"✅ Lembrete registrado: '{descricao}' no valor de R$ {valor:.2f}, com vencimento todo dia {dia_vencimento}."
     except (ValueError, KeyError, IndexError):
         return "❌ Formato do lembrete inválido. Por favor, use o modelo exato que eu enviei."
 
@@ -259,7 +259,7 @@ def processar_compra_parcelada(user_id, texto):
             "categoria": categoria, "data_inicio": datetime.now().isoformat()
         }
         salvar_compra_parcelada_db(user_id, compra_data)
-        return (f"✅ Compra parcelada registada: '{descricao}'\n"
+        return (f"✅ Compra parcelada registrada: '{descricao}'\n"
                 f"Valor: R$ {valor_total:.2f} em {num_parcelas}x de R$ {valor_parcela:.2f}\n"
                 f"Cartão: {cartao}")
     except (ValueError, KeyError, IndexError):
@@ -277,9 +277,9 @@ def processar_transacao_normal(user_id, texto):
     }
     salvar_transacao_db(user_id, transacao_data)
     if tipo == 'despesa':
-        return f"✅ Despesa registada: '{descricao_original}' (R$ {valor:.2f})."
+        return f"✅ Despesa registrada: '{descricao_original}' (R$ {valor:.2f})."
     elif tipo == 'receita':
-        return f"✅ Receita registada: '{descricao_original}' (R$ {valor:.2f})."
+        return f"✅ Receita registrada: '{descricao_original}' (R$ {valor:.2f})."
 
 def extrair_dados_transacao_normal(user_id, texto):
     tipo, valor, metodo, cartao, conta = 'despesa', None, None, None, None
